@@ -166,7 +166,7 @@ async function fetchActivitiesByOwner(sinceMs: number): Promise<Record<string, {
   return result
 }
 
-// Known lifecycle stages in display order. Custom numeric IDs are resolved dynamically via getLifecycleStageLabels().
+// Known lifecycle stages in display order.
 const LIFECYCLE_STAGES = [
   { id: "lead",                   label: "Lead" },
   { id: "marketingqualifiedlead", label: "MQL Cold" },
@@ -175,6 +175,7 @@ const LIFECYCLE_STAGES = [
   { id: "opportunity",            label: "Opportunity / Potential Investor" },
   { id: "customer",               label: "Customer / Existing Investor" },
   { id: "1874186475",             label: "Disqualified" },
+  { id: "jobapplicant",           label: "Job Applicant" },
   { id: "other",                  label: "Other" },
 ]
 
@@ -198,12 +199,11 @@ const stageDateProps: Record<string, string> = {
 }
 
 async function fetchPipelineData() {
-  const [owners, dynamicStageLabels] = await Promise.all([getOwners(), getLifecycleStageLabels()])
+  const owners = await getOwners()
 
-  // Build a complete label lookup: known stages override dynamic ones
   const knownLabelMap: Record<string, string> = Object.fromEntries(LIFECYCLE_STAGES.map(s => [s.id, s.label]))
   function stageLabel(id: string): string {
-    return knownLabelMap[id] || dynamicStageLabels[id] || id
+    return knownLabelMap[id] || id
   }
 
   const allContacts = await getAllContacts([
@@ -220,13 +220,16 @@ async function fetchPipelineData() {
   }
 
   // ── Ordered stage counts list for donut chart ──
-  // Include all LIFECYCLE_STAGES in order, then any unlisted stages found in data
+  // Only show the 9 canonical lifecycle stages; roll unknown IDs into "Other"
   const knownIds = new Set(LIFECYCLE_STAGES.map(s => s.id))
-  const extraIds = Object.keys(stageCounts).filter(id => !knownIds.has(id))
-  const stageCountsList = [
-    ...LIFECYCLE_STAGES.map(s => ({ id: s.id, label: s.label, count: stageCounts[s.id] || 0 })),
-    ...extraIds.map(id => ({ id, label: stageLabel(id), count: stageCounts[id] || 0 })),
-  ]
+  const unknownCount = Object.entries(stageCounts)
+    .filter(([id]) => !knownIds.has(id))
+    .reduce((sum, [, n]) => sum + n, 0)
+  const stageCountsList = LIFECYCLE_STAGES.map(s => ({
+    id: s.id,
+    label: s.label,
+    count: (stageCounts[s.id] || 0) + (s.id === "other" ? unknownCount : 0),
+  }))
 
   // ── Lifecycle history (for transition timing) ──
   const advancedIds = contacts
