@@ -186,10 +186,14 @@ export default function Dashboard() {
   const [expandedScriveFund, setExpandedScriveFund] = useState<string|null>(null)
   const [expandedScriveFundDate, setExpandedScriveFundDate] = useState<string|null>(null)
   const [expandedVnFundDate, setExpandedVnFundDate] = useState<string|null>(null)
-  const [tab, setTab] = useState<"deals"|"pipeline">("pipeline")
+  const [tab, setTab] = useState<"deals"|"contact-pipeline">("deals")
   const [pipelineData, setPipelineData] = useState<any>(null)
   const [pipelineLoading, setPipelineLoading] = useState(false)
-  const [region, setRegion] = useState<"dk"|"se"|"ship"|"at"|"fi"|"no">("dk")
+  const [region, setRegion] = useState<"dk"|"se"|"ship"|"at"|"fi"|"no">(() => {
+    if (typeof window === "undefined") return "dk"
+    const p = new URLSearchParams(window.location.search).get("region")
+    return (["dk","se","ship","at","fi","no"].includes(p ?? "") ? p : "dk") as "dk"|"se"|"ship"|"at"|"fi"|"no"
+  })
   const [pipelineModal, setPipelineModal] = useState<{title: string, deals: any[], fmtAmt?: (n: number) => string} | null>(null)
   // SE Sweden state
   const [seClosedDeals, setSeClosedDeals] = useState<any>(null)
@@ -760,6 +764,8 @@ export default function Dashboard() {
   // Domain-based access control
   const userEmail = session?.user?.email?.toLowerCase() ?? ""
   const userDomain = userEmail.split("@")[1] ?? ""
+  const PIPELINE_ALLOWED = new Set(["brj@vaekstkapital.dk","tnp@vaekstkapital.dk","sok@vaekstkapital.dk","spo@vaekstkapital.se","acs@vaekstkapital.se"])
+  const canAccessPipeline = userDomain === "vkfunddistribution.com" || userDomain === "vaekstholdings.com" || PIPELINE_ALLOWED.has(userEmail)
   const canAccessDK   = ["vaekstkapital.dk", "vkfunddistribution.com", "vaekstholdings.com"].includes(userDomain)
   const canAccessSE   = ["vaekstkapital.se", "vkfunddistribution.com", "vaekstholdings.com"].includes(userDomain)
   const canAccessShip = ["vkfunddistribution.com", "vk-shipping.com", "vaekstholdings.com"].includes(userDomain)
@@ -1086,62 +1092,12 @@ export default function Dashboard() {
     <div>
       <nav>
         <div className="nav-l">
-          <img src="/vaekstkapital-logo.webp" alt="Vaekstkapital" style={{height:22,width:"auto",objectFit:"contain"}} />
-          {canAccessDK && (
-            <button onClick={() => setRegion("dk")} className="chip" style={{cursor:"pointer",border:"none",fontFamily:"inherit",backgroundImage:"url(/dk-flag.jpg)",backgroundSize:"cover",backgroundPosition:"center",position:"relative",overflow:"hidden",padding:"0",minWidth:70,height:40}}>
-              <span style={{position:"absolute",inset:0,background: region==="dk" ? "rgba(0,0,0,.25)" : "rgba(0,0,0,.55)",transition:"background .2s"}}/>
-              <span style={{position:"relative",zIndex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"0 12px",height:"100%",color:"#fff",textShadow:"0 1px 3px rgba(0,0,0,.7)"}}>
-                <span style={{fontSize:9,fontWeight:500,letterSpacing:".08em",opacity:.85,lineHeight:1}}>TEAM</span>
-                <span style={{fontSize:11,fontWeight:700,letterSpacing:".06em",lineHeight:1.3}}>Denmark</span>
-              </span>
-            </button>
-          )}
-          {canAccessSE && (
-            <button onClick={() => setRegion("se")} className="chip" style={{cursor:"pointer",border:"none",fontFamily:"inherit",backgroundImage:"url(/se-flag.jpeg)",backgroundSize:"cover",backgroundPosition:"center",position:"relative",overflow:"hidden",padding:"0",minWidth:70,height:40}}>
-              <span style={{position:"absolute",inset:0,background: region==="se" ? "rgba(0,0,0,.25)" : "rgba(0,0,0,.55)",transition:"background .2s"}}/>
-              <span style={{position:"relative",zIndex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"0 12px",height:"100%",color:"#fff",textShadow:"0 1px 3px rgba(0,0,0,.7)"}}>
-                <span style={{fontSize:9,fontWeight:500,letterSpacing:".08em",opacity:.85,lineHeight:1}}>TEAM</span>
-                <span style={{fontSize:11,fontWeight:700,letterSpacing:".06em",lineHeight:1.3}}>Sweden</span>
-              </span>
-            </button>
-          )}
-          {canAccessShip && (
-            <button onClick={() => setRegion("ship")} className="chip" style={{cursor:"pointer",border:"none",fontFamily:"inherit",backgroundImage:"url(/ship-icon.jpg)",backgroundSize:"cover",backgroundPosition:"center",position:"relative",overflow:"hidden",padding:"0",minWidth:75,height:40}}>
-              <span style={{position:"absolute",inset:0,background: region==="ship" ? "rgba(0,0,0,.3)" : "rgba(0,0,0,.6)",transition:"background .2s"}}/>
-              <span style={{position:"relative",zIndex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"0 12px",height:"100%",color:"#fff",textShadow:"0 1px 3px rgba(0,0,0,.7)"}}>
-                <span style={{fontSize:9,fontWeight:500,letterSpacing:".08em",opacity:.85,lineHeight:1}}>TEAM</span>
-                <span style={{fontSize:11,fontWeight:700,letterSpacing:".06em",lineHeight:1.3}}>Shipping</span>
-              </span>
-            </button>
-          )}
-          {canAccessAT && (
-            <button onClick={() => setRegion("at")} className="chip" style={{cursor:"pointer",border:"none",fontFamily:"inherit",backgroundImage:"url(/austria-flag.webp)",backgroundSize:"cover",backgroundPosition:"center",position:"relative",overflow:"hidden",padding:"0",minWidth:70,height:40}}>
-              <span style={{position:"absolute",inset:0,background: region==="at" ? "rgba(0,0,0,.25)" : "rgba(0,0,0,.55)",transition:"background .2s"}}/>
-              <span style={{position:"relative",zIndex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"0 12px",height:"100%",color:"#fff",textShadow:"0 1px 3px rgba(0,0,0,.7)"}}>
-                <span style={{fontSize:9,fontWeight:500,letterSpacing:".08em",opacity:.85,lineHeight:1}}>TEAM</span>
-                <span style={{fontSize:11,fontWeight:700,letterSpacing:".06em",lineHeight:1.3}}>Austria</span>
-              </span>
-            </button>
-          )}
-          {canAccessFI && (
-            <button onClick={() => setRegion("fi")} className="chip" style={{cursor:"pointer",border:"none",fontFamily:"inherit",backgroundImage:"url(/finland-flag.jpg)",backgroundSize:"cover",backgroundPosition:"center",position:"relative",overflow:"hidden",padding:"0",minWidth:70,height:40}}>
-              <span style={{position:"absolute",inset:0,background: region==="fi" ? "rgba(0,0,0,.25)" : "rgba(0,0,0,.55)",transition:"background .2s"}}/>
-              <span style={{position:"relative",zIndex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"0 12px",height:"100%",color:"#fff",textShadow:"0 1px 3px rgba(0,0,0,.7)"}}>
-                <span style={{fontSize:9,fontWeight:500,letterSpacing:".08em",opacity:.85,lineHeight:1}}>TEAM</span>
-                <span style={{fontSize:11,fontWeight:700,letterSpacing:".06em",lineHeight:1.3}}>Finland</span>
-              </span>
-            </button>
-          )}
-          {canAccessNO && (
-            <button onClick={() => setRegion("no")} className="chip" style={{cursor:"pointer",border:"none",fontFamily:"inherit",backgroundImage:"url(/norway-flag.jpg)",backgroundSize:"cover",backgroundPosition:"center",position:"relative",overflow:"hidden",padding:"0",minWidth:70,height:40}}>
-              <span style={{position:"absolute",inset:0,background: region==="no" ? "rgba(0,0,0,.25)" : "rgba(0,0,0,.55)",transition:"background .2s"}}/>
-              <span style={{position:"relative",zIndex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"0 12px",height:"100%",color:"#fff",textShadow:"0 1px 3px rgba(0,0,0,.7)"}}>
-                <span style={{fontSize:9,fontWeight:500,letterSpacing:".08em",opacity:.85,lineHeight:1}}>TEAM</span>
-                <span style={{fontSize:11,fontWeight:700,letterSpacing:".06em",lineHeight:1.3}}>Norway</span>
-              </span>
-            </button>
-          )}
-
+          <a href="/" style={{display:"flex",alignItems:"center",textDecoration:"none"}}>
+            <img src="/vaekstkapital-logo.webp" alt="Vaekstkapital" style={{height:22,width:"auto",objectFit:"contain"}} />
+          </a>
+          <button onClick={() => router.push("/")} style={{cursor:"pointer",border:"1px solid rgba(255,255,255,.25)",fontFamily:"inherit",background:"transparent",padding:"0 12px",height:28,borderRadius:4,fontSize:11,fontWeight:600,letterSpacing:".06em",color:"rgba(255,255,255,.8)"}}>
+            ← Go back to Main
+          </button>
           {["vaekstholdings.com","vkfunddistribution.com"].includes(userDomain) && (<>
             <button onClick={() => router.push("/investortur")} className="chip" style={{cursor:"pointer",border:"none",fontFamily:"inherit",background:"#15624c",position:"relative",overflow:"hidden",padding:"0",minWidth:110,height:28,borderRadius:4}}>
               <span style={{position:"relative",zIndex:1,display:"flex",alignItems:"center",gap:5,padding:"0 12px",height:"100%",fontSize:11,fontWeight:700,letterSpacing:".06em",color:"#fff"}}>Investor Tour</span>
@@ -1150,7 +1106,11 @@ export default function Dashboard() {
               <span style={{position:"relative",zIndex:1,display:"flex",alignItems:"center",gap:5,padding:"0 12px",height:"100%",fontSize:11,fontWeight:700,letterSpacing:".06em",color:"#fff"}}>Sales Report</span>
             </button>
           </>)}
-
+          {canAccessPipeline && (()=>{ const brandMap: Record<string,string> = {dk:"0",se:"17424990",ship:"17893427",at:"18387361",fi:"17065112",no:"17435297"}; const b=brandMap[region]; return (
+            <button onClick={()=>router.push(b?`/pipeline?brand=${b}`:"/pipeline")} className="chip" style={{cursor:"pointer",border:"none",fontFamily:"inherit",background:"#2d68b0",position:"relative",overflow:"hidden",padding:"0",minWidth:130,height:28,borderRadius:4}}>
+              <span style={{position:"relative",zIndex:1,display:"flex",alignItems:"center",gap:5,padding:"0 12px",height:"100%",fontSize:11,fontWeight:700,letterSpacing:".06em",color:"#fff"}}>Contact Pipeline</span>
+            </button>
+          )})()}
         </div>
         <div className="nav-r">
           <div className="live"><span className="live-dot"/>Data · HubSpot</div>
@@ -1165,27 +1125,22 @@ export default function Dashboard() {
         </div>
       </nav>
 
-      {region === "dk" && (
-        <div style={{position:"sticky",top:"54px",zIndex:10,background:"var(--bei)",borderBottom:"1px solid var(--bdr)",display:"flex",gap:0,padding:"0 24px"}}>
-          {(["pipeline","deals"] as const).map(t => (
-            <button key={t} onClick={() => tab !== t && setTab(t)} style={{fontSize:11,fontWeight:600,letterSpacing:".06em",textTransform:"uppercase",padding:"12px 20px",border:"none",borderBottom: tab===t ? "2px solid var(--grn)" : "2px solid transparent",background:"transparent",color: tab===t ? "var(--grn)" : "var(--ink3)",cursor: tab===t ? "default" : "pointer",fontFamily:"inherit",marginBottom:-1}}>
-              {t === "pipeline" ? "Lead Pipeline" : "Deals"}
+      {(() => {
+        const regionName: Record<string,string> = {dk:"Denmark",se:"Sweden",ship:"Shipping",at:"Austria",fi:"Finland",no:"Norway"}
+        return (
+          <div style={{position:"sticky",top:"54px",zIndex:10,background:"var(--bei)",borderBottom:"1px solid var(--bdr)",display:"flex",gap:0,padding:"0 24px"}}>
+            <button style={{fontSize:11,fontWeight:600,letterSpacing:".06em",textTransform:"uppercase",padding:"12px 20px",border:"none",borderBottom:"2px solid var(--grn)",background:"transparent",color:"var(--grn)",cursor:"default",fontFamily:"inherit",marginBottom:-1}}>
+              {regionName[region]||""} Deals
             </button>
-          ))}
-        </div>
-      )}
+          </div>
+        )
+      })()}
 
-      <main>
+      <main style={{display: tab==="deals" ? "" : "none"}}>
         {/* ── DK Denmark ──────────────────────────────────────────────────────── */}
         <div style={{display: region==="dk" ? "" : "none"}}>
-        <div style={{display: tab==="pipeline" ? "" : "none"}}>
-        {/* ── Lead Pipeline inline ──────────────────────────── */}
-        {pipelineLoading && !pipelineData && (
-          <div style={{textAlign:"center",padding:"60px 0",color:"var(--ink3)"}}><div className="spinner" style={{margin:"0 auto 12px"}} /><div>Loading Lead Pipeline data…</div></div>
-        )}
-        {!pipelineData && !pipelineLoading && (
-          <div style={{textAlign:"center",padding:"60px 0"}}><div style={{color:"var(--ink3)",marginBottom:12}}>No pipeline data — sync to load.</div><button onClick={async()=>{setPipelineLoading(true);try{await fetch("/api/pipeline-sync");const d=await fetch("/api/pipeline-data").then(r=>r.json());if(!d.error)setPipelineData(d);}catch{}setPipelineLoading(false);}} style={{padding:"8px 20px",borderRadius:6,border:"none",background:"var(--pur)",color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>↻ Sync Lead Pipeline</button></div>
-        )}
+        {/* old DK pipeline section — hidden; Contact Pipeline tab shown globally above */}
+        <div style={{display:"none"}}>
         {pipelineData && (()=>{
           const pl=pipelineData,fd2=pl.funnelData||[],ft2=fd2[0]?.count||1,rv2=pl.reinvestering||{},sc2=pl.stageCounts||{}
           const p2=(n: number,t: number)=>t>0?Math.round(n/t*100):0
@@ -1256,10 +1211,10 @@ export default function Dashboard() {
           {(pl.stuckLeads?.length||0)>0&&(<div className="mt"><div className="lbl"><span className="lbl-text">Stuck leads · &gt;30 days</span></div><div className="tcard"><div style={{overflowY:"auto",maxHeight:340}}><table style={{width:"100%",borderCollapse:"collapse"}}><thead style={{position:"sticky",top:0,background:"var(--bei)",zIndex:1}}><tr>{["Name","Stage","Days","Salesperson","Last Active","HubSpot"].map(h=><th key={h} style={{fontSize:10,fontWeight:600,letterSpacing:".07em",textTransform:"uppercase" as const,color:"var(--ink3)",padding:"7px 16px",textAlign:"left" as const,borderBottom:"1px solid var(--bdr)"}}>{h}</th>)}</tr></thead><tbody>{(pl.stuckLeads as any[]).map((l: any)=>(<tr key={l.id}><td style={{padding:"9px 16px",borderBottom:"1px solid var(--bdr)",fontSize:12}}><div style={{fontWeight:500,color:"var(--ink1)"}}>{l.name||"—"}</div><div style={{fontSize:10,color:"var(--ink3)"}}>{l.email}</div></td><td style={{padding:"9px 16px",borderBottom:"1px solid var(--bdr)",fontSize:12,color:"var(--ink3)"}}>{l.stage}</td><td style={{padding:"9px 16px",borderBottom:"1px solid var(--bdr)",fontSize:12}}><span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:10,background:(l.daysInStage||0)<30?"#d1fae5":(l.daysInStage||0)<60?"#fef3c7":"#fee2e2",color:(l.daysInStage||0)<30?"#065f46":(l.daysInStage||0)<60?"#92400e":"#b91c1c"}}>{l.daysInStage}d</span></td><td style={{padding:"9px 16px",borderBottom:"1px solid var(--bdr)",fontSize:12,color:"var(--ink2)"}}>{l.owner}</td><td style={{padding:"9px 16px",borderBottom:"1px solid var(--bdr)",fontSize:12,color:"var(--ink3)"}}>{l.lastActivity}</td><td style={{padding:"9px 16px",borderBottom:"1px solid var(--bdr)",fontSize:12}}><a href={`https://app-eu1.hubspot.com/contacts/144061788/contact/${l.id}`} target="_blank" rel="noreferrer" style={{color:"var(--blu)",fontSize:11}}>Open ↗</a></td></tr>))}</tbody></table></div></div></div>)}
           </>)
         })()}
-        </div>{/* /pipeline tab */}
+        </div>{/* /old-pipeline-hidden */}
 
-
-        <div style={{display: tab==="deals" ? "" : "none"}}>
+        {/* ── DK Deals ── */}
+        <div>
 
         {/* ─── SECTION 1: DEALS CLOSED ─────────────────────────────────────── */}
         <div style={{padding:"14px 0 6px",borderTop:"3px solid var(--grn)",marginTop:8}}>
