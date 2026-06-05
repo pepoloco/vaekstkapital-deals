@@ -7,11 +7,21 @@ const UPSTASH_URL   = process.env.KV_REST_API_URL   ?? process.env.UPSTASH_REST_
 const UPSTASH_TOKEN = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REST_API_TOKEN
 const CACHE_KEY = "vk-pipeline-data"
 
-let memCache: unknown = null
+// Brand IDs for hs_all_assigned_business_unit_ids property
+const BRAND_IDS: Record<string, { id: string; label: string }> = {
+  dk:   { id: "0",        label: "Vaekstkapital DK (Denmark)" },
+  se:   { id: "17424990", label: "Vaekstkapital SE (Sweden)" },
+  ship: { id: "17893427", label: "Vaekstkapital Shipping" },
+  at:   { id: "18387361", label: "Vaekstkapital AT (Austria)" },
+  fi:   { id: "17065112", label: "Vaekstkapital FI (Finland)" },
+  no:   { id: "17435297", label: "Vaekstkapital NO (Norway)" },
+}
 
-async function writeCache(data: unknown) {
-  if (!UPSTASH_URL || !UPSTASH_TOKEN) { memCache = data; return }
-  await fetch(`${UPSTASH_URL}/set/${CACHE_KEY}`, {
+let memCache: Record<string, unknown> = {}
+
+async function writeCache(key: string, data: unknown) {
+  if (!UPSTASH_URL || !UPSTASH_TOKEN) { memCache[key] = data; return }
+  await fetch(`${UPSTASH_URL}/set/${key}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, "Content-Type": "application/json" },
     body: JSON.stringify(JSON.stringify(data)),
@@ -23,7 +33,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 const TEST_DOMAINS = ["vaekstnet.com","vaekstkapital.com","vaekstkapital.dk","mailinator.com","yopmail.com","example.com"]
 function isTestContact(email: string) {
-  if (!email) return true
+  if (!email) return false
   return TEST_DOMAINS.includes(email.split("@")[1]?.toLowerCase())
 }
 
@@ -35,7 +45,7 @@ function median(arr: number[]): number {
 }
 
 async function hsGet(path: string, attempt = 0): Promise<any> {
-  await sleep(150)
+  await sleep(80)
   const res = await fetch(`${BASE}${path}`, { headers: { Authorization: `Bearer ${KEY}` }, cache: "no-store" })
   if (res.status === 429 && attempt < 5) { await sleep(2000 * (attempt + 1)); return hsGet(path, attempt + 1) }
   if (!res.ok) throw new Error(`GET ${path} → ${res.status}`)
@@ -43,7 +53,7 @@ async function hsGet(path: string, attempt = 0): Promise<any> {
 }
 
 async function hsPost(path: string, body: object, attempt = 0): Promise<any> {
-  await sleep(150)
+  await sleep(80)
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" },
@@ -72,7 +82,7 @@ async function getAllContacts(properties: string[]): Promise<any[]> {
 async function getLifecycleHistory(ids: string[]): Promise<Record<string, any[]>> {
   const result: Record<string, any[]> = {}
   for (let i = 0; i < ids.length; i += 100) {
-    await sleep(200)
+    await sleep(100)
     try {
       const data = await hsPost("/crm/v3/objects/contacts/batch/read", {
         inputs: ids.slice(i, i + 100).map(id => ({ id })),
@@ -90,13 +100,49 @@ async function getLifecycleHistory(ids: string[]): Promise<Record<string, any[]>
   return result
 }
 
-async function getOwners(): Promise<Record<string, string>> {
+async function getOwners(): Promise<{ names: Record<string, string>; userIdToOwnerId: Record<string, string> }> {
   const data = await hsGet("/crm/v3/owners?limit=100")
-  const map: Record<string, string> = {}
+  const names: Record<string, string> = {}
+  const userIdToOwnerId: Record<string, string> = {}
   for (const o of data.results ?? []) {
-    map[String(o.id)] = [o.firstName, o.lastName].filter(Boolean).join(" ")
+    names[String(o.id)] = [o.firstName, o.lastName].filter(Boolean).join(" ")
+    if (o.userId) userIdToOwnerId[String(o.userId)] = String(o.id)
   }
-  return map
+  return { names, userIdToOwnerId }
+}
+
+// Returns: brandId -> Set of ownerIds that belong to that brand's team (parent + all sub-teams)
+async function getTeamOwnerIds(userIdToOwnerId: Record<string, string>): Promise<Record<string, string[]>> {
+  // Matches both parent teams and sub-teams — order matters (longer prefixes first)
+  const TEAM_PATTERNS: Array<{ prefix: string; brandId: string }> = [
+    { prefix: "team denmark",  brandId: "0" },
+    { prefix: "bu dk",         brandId: "0" },
+    { prefix: "team sweden",   brandId: "17424990" },
+    { prefix: "bu se",         brandId: "17424990" },
+    { prefix: "team shipping", brandId: "17893427" },
+    { prefix: "bu ship",       brandId: "17893427" },
+    { prefix: "team austria",  brandId: "18387361" },
+    { prefix: "bu at",         brandId: "18387361" },
+    { prefix: "team finland",  brandId: "17065112" },
+    { prefix: "bu fi",         brandId: "17065112" },
+    { prefix: "team norway",   brandId: "17435297" },
+    { prefix: "bu no",         brandId: "17435297" },
+  ]
+  const result: Record<string, Set<string>> = {}
+  try {
+    const data = await hsGet("/settings/v3/users/teams?includeMembers=true")
+    for (const team of data.results ?? []) {
+      const key = (team.name || "").toLowerCase()
+      const match = TEAM_PATTERNS.find(p => key.startsWith(p.prefix))
+      if (!match) continue
+      if (!result[match.brandId]) result[match.brandId] = new Set()
+      for (const userId of team.userIds ?? []) {
+        const ownerId = userIdToOwnerId[String(userId)]
+        if (ownerId) result[match.brandId].add(ownerId)
+      }
+    }
+  } catch (e) { console.error("[sync] getTeamOwnerIds error:", e) }
+  return Object.fromEntries(Object.entries(result).map(([k, v]) => [k, Array.from(v)]))
 }
 
 async function getDealStageNames(): Promise<Record<string, string>> {
@@ -166,7 +212,9 @@ async function fetchActivitiesByOwner(sinceMs: number): Promise<Record<string, {
   return result
 }
 
-// Known lifecycle stages in display order.
+// Canonical lifecycle stages — IDs verified against HubSpot property settings.
+// "Attempted / Connected" (773079518) exists in HubSpot but is excluded from the
+// main funnel/donut; contacts with that stage are counted under "Other".
 const LIFECYCLE_STAGES = [
   { id: "lead",                   label: "Lead" },
   { id: "marketingqualifiedlead", label: "MQL Cold" },
@@ -174,98 +222,88 @@ const LIFECYCLE_STAGES = [
   { id: "salesqualifiedlead",     label: "SQL" },
   { id: "opportunity",            label: "Opportunity / Potential Investor" },
   { id: "customer",               label: "Customer / Existing Investor" },
+  { id: "evangelist",             label: "Evangelist" },
   { id: "1874186475",             label: "Disqualified" },
-  { id: "jobapplicant",           label: "Job Applicant" },
+  { id: "3529709812",             label: "Job Applicant" },
   { id: "other",                  label: "Other" },
 ]
+
+// Extra stage IDs that exist in HubSpot but are not shown in the main funnel/donut.
+// Their contacts are counted under "Other" and labeled correctly elsewhere (e.g. stuck table).
+const EXTRA_STAGE_LABELS: Record<string, string> = {
+  "773079518": "Attempted / Connected",
+}
 
 // Ordered stage IDs used in the activation funnel (Lead → Customer progression)
 const FUNNEL_STAGE_ORDER = [
   "lead", "marketingqualifiedlead", "770940371", "salesqualifiedlead", "opportunity", "customer",
 ]
 
-// Lead Status values in display order
-const LEAD_STATUS_ORDER = [
-  "Canvas", "Attempting", "Connected", "Meeting",
-  "Potential Investor", "Existing Investor", "Nurture", "Grade E", "Grade F",
+// Actual hs_lead_status values from HubSpot (stored as uppercase keys)
+const LEAD_STATUS_OPTIONS = [
+  { value: "NEW",                  label: "New" },
+  { value: "OPEN",                 label: "Open" },
+  { value: "IN_PROGRESS",         label: "In Progress" },
+  { value: "OPEN_DEAL",            label: "Open Deal" },
+  { value: "UNQUALIFIED",          label: "Unqualified" },
+  { value: "ATTEMPTED_TO_CONTACT", label: "Attempted to Contact" },
+  { value: "CONNECTED",            label: "Connected" },
+  { value: "BAD_TIMING",           label: "Bad Timing" },
 ]
+const LEAD_STATUS_ORDER = LEAD_STATUS_OPTIONS.map(o => o.value)
+const LEAD_STATUS_LABELS: Record<string, string> = Object.fromEntries(LEAD_STATUS_OPTIONS.map(o => [o.value, o.label]))
 
-const stageDateProps: Record<string, string> = {
-  lead: "hs_lifecyclestage_lead_date",
-  marketingqualifiedlead: "hs_lifecyclestage_marketingqualifiedlead_date",
-  salesqualifiedlead: "hs_lifecyclestage_salesqualifiedlead_date",
-  opportunity: "hs_lifecyclestage_opportunity_date",
-  customer: "hs_lifecyclestage_customer_date",
-}
 
-async function fetchPipelineData() {
-  const owners = await getOwners()
+// ── Reusable contact metrics computation (called for global AND per-brand) ──────
+function computeContactMetrics(
+  contacts: any[],
+  owners: Record<string, string>,
+  knownLabelMap: Record<string, string>,
+  lifecycleHistory: Record<string, any[]>,
+  now: number,
+) {
+  const stageLabel = (id: string) => knownLabelMap[id] || id
+  const normStatus = (s: string) => s.trim().toLowerCase()
 
-  const knownLabelMap: Record<string, string> = Object.fromEntries(LIFECYCLE_STAGES.map(s => [s.id, s.label]))
-  function stageLabel(id: string): string {
-    return knownLabelMap[id] || id
-  }
-
-  const allContacts = await getAllContacts([
-    "email","firstname","lastname","lifecyclestage","hs_lead_status",
-    "createdate","hs_last_sales_activity_timestamp","hubspot_owner_id","endavu_deal_id","phone","company",
-    "hubspotscore","hs_lead_source","global_grade","notes_last_contacted",
-  ])
-  const contacts = allContacts.filter(c => !isTestContact(c.email || "") && !c.endavu_deal_id)
-
-  // ── Stage counts (all stages including dynamic) ──
+  // Stage counts
   const stageCounts: Record<string, number> = {}
-  for (const c of contacts) {
-    if (c.lifecyclestage) stageCounts[c.lifecyclestage] = (stageCounts[c.lifecyclestage] || 0) + 1
-  }
+  for (const c of contacts) if (c.lifecyclestage) stageCounts[c.lifecyclestage] = (stageCounts[c.lifecyclestage] || 0) + 1
 
-  // ── Ordered stage counts list for donut chart ──
-  // Only show the 9 canonical lifecycle stages; roll unknown IDs into "Other"
+  // Stage counts list for donut (roll unknowns into Other)
   const knownIds = new Set(LIFECYCLE_STAGES.map(s => s.id))
-  const unknownCount = Object.entries(stageCounts)
-    .filter(([id]) => !knownIds.has(id))
-    .reduce((sum, [, n]) => sum + n, 0)
+  const unknownCount = Object.entries(stageCounts).filter(([id]) => !knownIds.has(id)).reduce((sum, [, n]) => sum + n, 0)
   const stageCountsList = LIFECYCLE_STAGES.map(s => ({
-    id: s.id,
-    label: s.label,
+    id: s.id, label: s.label,
     count: (stageCounts[s.id] || 0) + (s.id === "other" ? unknownCount : 0),
   }))
 
-  // ── Lifecycle history (for transition timing) ──
-  const advancedIds = contacts
-    .filter(c => ["opportunity","customer","salesqualifiedlead"].includes(c.lifecyclestage))
-    .map(c => c._id)
-  const lifecycleHistory = await getLifecycleHistory(advancedIds)
-
-  // ── Transition durations ──
+  // Transition durations (date props + history for MQL Hot)
   const transitionDurations: Record<string, number[]> = {
-    "Lead → MQL Cold": [],
-    "MQL Cold → MQL Hot": [],
-    "MQL Hot → SQL": [],
-    "SQL → Opportunity": [],
-    "Opportunity → Customer": [],
-    "Lead → Customer (total)": [],
+    "Lead → MQL Cold": [], "MQL Cold → MQL Hot": [], "MQL Hot → SQL": [],
+    "SQL → Opportunity": [], "Opportunity → Customer": [], "Lead → Customer (total)": [],
+  }
+  const pushDur = (arr: number[], fromMs: number | null, toMs: number | null) => {
+    if (fromMs && toMs && toMs > fromMs) { const d = (toMs - fromMs) / 86400000; if (d > 0 && d < 1825) arr.push(d) }
+  }
+  for (const c of contacts) {
+    const ld  = c.hs_lifecyclestage_lead_date                   ? new Date(c.hs_lifecyclestage_lead_date).getTime()                   : null
+    const mcd = c.hs_lifecyclestage_marketingqualifiedlead_date ? new Date(c.hs_lifecyclestage_marketingqualifiedlead_date).getTime() : null
+    const sqd = c.hs_lifecyclestage_salesqualifiedlead_date     ? new Date(c.hs_lifecyclestage_salesqualifiedlead_date).getTime()     : null
+    const opd = c.hs_lifecyclestage_opportunity_date            ? new Date(c.hs_lifecyclestage_opportunity_date).getTime()            : null
+    const cud = c.hs_lifecyclestage_customer_date               ? new Date(c.hs_lifecyclestage_customer_date).getTime()               : null
+    pushDur(transitionDurations["Lead → MQL Cold"],        ld,  mcd)
+    pushDur(transitionDurations["SQL → Opportunity"],      sqd, opd)
+    pushDur(transitionDurations["Opportunity → Customer"], opd, cud)
+    pushDur(transitionDurations["Lead → Customer (total)"],ld,  cud)
   }
   for (const history of Object.values(lifecycleHistory)) {
     if (!history?.length) continue
     const stageTimes: Record<string, Date> = {}
     for (const e of history as any[]) if (e.value && e.ts && !stageTimes[e.value]) stageTimes[e.value] = e.ts
-    const get = (id: string) => stageTimes[id] ?? null
-    const pairs = [
-      { key: "Lead → MQL Cold",    from: "lead",                   to: "marketingqualifiedlead" },
-      { key: "MQL Cold → MQL Hot", from: "marketingqualifiedlead", to: "770940371" },
-      { key: "MQL Hot → SQL",      from: "770940371",              to: "salesqualifiedlead" },
-      { key: "SQL → Opportunity",  from: "salesqualifiedlead",     to: "opportunity" },
-      { key: "Opportunity → Customer", from: "opportunity",        to: "customer" },
-    ]
-    for (const p of pairs) {
-      const from = get(p.from); const to = get(p.to)
-      if (from && to && to > from) { const d = (to.getTime() - from.getTime()) / 86400000; if (d < 1825) transitionDurations[p.key].push(d) }
-    }
-    const l = get("lead"); const k = get("customer")
-    if (l && k && k > l) { const d = (k.getTime() - l.getTime()) / 86400000; if (d < 1825) transitionDurations["Lead → Customer (total)"].push(d) }
+    const mc = stageTimes["marketingqualifiedlead"], mh = stageTimes["770940371"], sq = stageTimes["salesqualifiedlead"]
+    if (mc && mh && mh > mc) { const d = (mh.getTime() - mc.getTime()) / 86400000; if (d > 0 && d < 1825) transitionDurations["MQL Cold → MQL Hot"].push(d) }
+    if (mh && sq && sq > mh) { const d = (sq.getTime() - mh.getTime()) / 86400000; if (d > 0 && d < 1825) transitionDurations["MQL Hot → SQL"].push(d) }
   }
-
   const avgDaysPerTransition: Record<string, { avg: number; median: number; count: number }> = {}
   for (const [key, durations] of Object.entries(transitionDurations)) {
     avgDaysPerTransition[key] = {
@@ -274,145 +312,78 @@ async function fetchPipelineData() {
     }
   }
 
-  // ── Time in current stage ──
-  const now = Date.now()
-  const avgDaysInCurrentStage: Record<string, { label: string; avg: number; median: number; count: number; dataSource: string }> = {}
+  // Time in current stage
+  const stageDatePropMap: Record<string, string> = {
+    lead: "hs_lifecyclestage_lead_date",
+    marketingqualifiedlead: "hs_lifecyclestage_marketingqualifiedlead_date",
+    salesqualifiedlead: "hs_lifecyclestage_salesqualifiedlead_date",
+    opportunity: "hs_lifecyclestage_opportunity_date",
+    customer: "hs_lifecyclestage_customer_date",
+  }
+  const avgDaysInCurrentStage: Record<string, { label: string; avg: number; median: number; count: number }> = {}
   for (const stage of LIFECYCLE_STAGES) {
-    if (stage.id === "1874186475") continue // skip Disqualified
+    if (stage.id === "1874186475" || stage.id === "3529709812") continue
     const inStage = contacts.filter(c => c.lifecyclestage === stage.id)
     if (!inStage.length) continue
-    const isCustom = !stageDateProps[stage.id]
-    let days: number[]
-    let dataSource: string
-    if (isCustom) {
-      days = inStage.map(c => { const ref = c.hs_last_sales_activity_timestamp || c.createdate; return ref ? (now - new Date(ref).getTime()) / 86400000 : 0 }).filter(d => d > 0)
-      dataSource = "last_activity_approx"
-    } else {
-      const fromHist: number[] = []; const fromFall: number[] = []
-      for (const c of inStage) {
-        const hist = lifecycleHistory[c._id] as any[]
-        if (hist) {
-          const entries = hist.filter((h: any) => h.value === stage.id)
-          if (entries.length) { const d = (now - new Date(entries[entries.length - 1].ts).getTime()) / 86400000; if (d > 0 && d < 3650) { fromHist.push(d); continue } }
-        }
-        if (c.createdate) { const d = (now - new Date(c.createdate).getTime()) / 86400000; if (d > 0) fromFall.push(d) }
-      }
-      days = [...fromHist, ...fromFall]
-      dataSource = fromHist.length > fromFall.length ? "property_history" : "createdate_approx"
+    const dateProp = stageDatePropMap[stage.id]
+    const days: number[] = []
+    for (const c of inStage) {
+      if (dateProp && c[dateProp]) { const d = (now - new Date(c[dateProp]).getTime()) / 86400000; if (d > 0 && d < 3650) { days.push(d); continue } }
+      const hist = lifecycleHistory[c._id] as any[] | undefined
+      if (hist) { const entries = hist.filter((h: any) => h.value === stage.id); if (entries.length) { const d = (now - new Date(entries[entries.length - 1].ts).getTime()) / 86400000; if (d > 0 && d < 3650) { days.push(d); continue } } }
+      if (c.createdate) { const d = (now - new Date(c.createdate).getTime()) / 86400000; if (d > 0) days.push(d) }
     }
-    avgDaysInCurrentStage[stage.id] = {
-      label: stage.label,
-      avg: days.length ? Math.round(days.reduce((a, b) => a + b, 0) / days.length) : 0,
-      median: median(days), count: days.length, dataSource,
-    }
+    avgDaysInCurrentStage[stage.id] = { label: stage.label, avg: days.length ? Math.round(days.reduce((a, b) => a + b, 0) / days.length) : 0, median: median(days), count: days.length }
   }
 
-  // ── Activation Funnel (cumulative: contacts at stage OR later) ──
+  // Activation funnel — actual contacts currently at each stage
   const funnelData = FUNNEL_STAGE_ORDER.map(id => ({
-    stage: stageLabel(id),
-    count: contacts.filter(c => FUNNEL_STAGE_ORDER.indexOf(c.lifecyclestage) >= FUNNEL_STAGE_ORDER.indexOf(id)).length,
+    id, stage: stageLabel(id),
+    count: contacts.filter(c => c.lifecyclestage === id).length,
   }))
 
-  // ── Stuck contacts (30+ days no sales activity, excl. Customer / Disqualified) ──
+  // Stuck contacts
   const stuckLeads = contacts
-    .filter(c => {
-      const s = c.lifecyclestage
-      if (!s || s === "customer" || s === "1874186475") return false
-      const ref = c.hs_last_sales_activity_timestamp || c.createdate
-      if (!ref) return false
-      const d = (now - new Date(ref).getTime()) / 86400000
-      return d > 30 && d < 1825
-    })
-    .map(c => {
-      const ref = c.hs_last_sales_activity_timestamp || c.createdate
-      return {
-        id: c._id,
-        name: [c.firstname, c.lastname].filter(Boolean).join(" ") || c.email,
-        email: c.email,
-        company: c.company || "",
-        stage: stageLabel(c.lifecyclestage),
-        daysInStage: ref ? Math.round((now - new Date(ref).getTime()) / 86400000) : null,
-        owner: owners[c.hubspot_owner_id] || "Unknown",
-        lastActivity: c.hs_last_sales_activity_timestamp || null,
-      }
-    })
+    .filter(c => { const s = c.lifecyclestage; if (!s || s === "customer" || s === "1874186475" || s === "3529709812") return false; const ref = c.hs_last_sales_activity_timestamp || c.createdate; if (!ref) return false; const d = (now - new Date(ref).getTime()) / 86400000; return d > 30 && d < 1825 })
+    .map(c => { const ref = c.hs_last_sales_activity_timestamp || c.createdate; const oid = c.hubspot_owner_id || ""; return { id: c._id, name: [c.firstname, c.lastname].filter(Boolean).join(" ") || c.email, email: c.email, company: c.company || "", stage: stageLabel(c.lifecyclestage), leadStatus: c.hs_lead_status || "—", daysInStage: ref ? Math.round((now - new Date(ref).getTime()) / 86400000) : null, ownerId: oid, owner: owners[oid] || "Unknown", lastActivity: c.hs_last_sales_activity_timestamp || null } })
     .sort((a, b) => (b.daysInStage || 0) - (a.daysInStage || 0))
-
-  // ── Stuck per owner ──
   const stuckOwnerMap: Record<string, number> = {}
-  for (const l of stuckLeads) {
-    stuckOwnerMap[l.owner] = (stuckOwnerMap[l.owner] || 0) + 1
-  }
-  const stuckPerOwner = Object.entries(stuckOwnerMap)
-    .map(([owner, stuck]) => ({ owner, stuck }))
-    .sort((a, b) => b.stuck - a.stuck)
+  for (const l of stuckLeads) stuckOwnerMap[l.owner] = (stuckOwnerMap[l.owner] || 0) + 1
+  const stuckPerOwner = Object.entries(stuckOwnerMap).map(([owner, stuck]) => ({ owner, stuck })).sort((a, b) => b.stuck - a.stuck)
 
-  // ── Nurture candidates: 180+ days no activity, excl. Nurture/Existing Investor/Grade E-F/Customer/Disqualified ──
-  const EXCLUDE_STATUSES = new Set(["nurture","existing investor","grade e","grade f"])
+  // Nurture candidates — contacts in Journey Stage "In Nurturing"
   const nurtureCandidates = contacts
     .filter(c => {
-      const ref = c.hs_last_sales_activity_timestamp || c.createdate
-      if (!ref) return false
-      if ((now - new Date(ref).getTime()) / 86400000 < 180) return false
-      const ls = c.lifecyclestage
-      if (ls === "customer" || ls === "1874186475") return false
-      const status = (c.hs_lead_status || "").toLowerCase().trim()
-      if (EXCLUDE_STATUSES.has(status)) return false
-      return true
+      const js = (c.journey_stage || "").toLowerCase()
+      return js === "in nurturing" || js === "nurturing" || js === "in_nurturing"
     })
-    .map(c => ({
-      id: c._id,
-      name: [c.firstname, c.lastname].filter(Boolean).join(" ") || c.email,
-      email: c.email,
-      stage: stageLabel(c.lifecyclestage) || "—",
-      lastContacted: c.notes_last_contacted || c.hs_last_sales_activity_timestamp || null,
-      owner: owners[c.hubspot_owner_id] || "Unknown",
-    }))
-    .sort((a, b) => {
-      // Sort by lastContacted ascending (longest ago first)
-      if (!a.lastContacted) return -1
-      if (!b.lastContacted) return 1
-      return new Date(a.lastContacted).getTime() - new Date(b.lastContacted).getTime()
-    })
+    .map(c => ({ id: c._id, name: [c.firstname, c.lastname].filter(Boolean).join(" ") || c.email, email: c.email, stage: stageLabel(c.lifecyclestage) || "—", leadStatus: c.hs_lead_status || "—", journeyStage: c.journey_stage || "—", lastContacted: c.notes_last_contacted || c.hs_last_sales_activity_timestamp || null, owner: owners[c.hubspot_owner_id] || "Unknown" }))
+    .sort((a, b) => { if (!a.lastContacted) return -1; if (!b.lastContacted) return 1; return new Date(a.lastContacted).getTime() - new Date(b.lastContacted).getTime() })
 
-  // ── Lead Status Distribution ──
+  // Lead Status Distribution (use display labels as keys)
   const statusCountMap: Record<string, number> = {}
-  for (const c of contacts) {
-    if (c.hs_lead_status) {
-      statusCountMap[c.hs_lead_status] = (statusCountMap[c.hs_lead_status] || 0) + 1
+  for (const c of contacts) if (c.hs_lead_status) statusCountMap[c.hs_lead_status] = (statusCountMap[c.hs_lead_status] || 0) + 1
+  const leadStatusDistribution = LEAD_STATUS_OPTIONS.map(({ value, label }) => ({
+    status: label,
+    count: statusCountMap[value] || 0,
+  }))
+
+  // Stage × Status matrix (columns use display labels)
+  const stageStatusMatrix = LIFECYCLE_STAGES.filter(s => s.id !== "other").map(stage => {
+    const row: Record<string, any> = { stage: stage.label }
+    for (const { value, label } of LEAD_STATUS_OPTIONS) {
+      row[label] = contacts.filter(c => c.lifecyclestage === stage.id && c.hs_lead_status === value).length
     }
-  }
-  // Match case-insensitively against the canonical order
-  const normStatus = (s: string) => s.trim().toLowerCase()
-  const leadStatusDistribution = LEAD_STATUS_ORDER.map(status => {
-    const count = Object.entries(statusCountMap)
-      .filter(([k]) => normStatus(k) === normStatus(status))
-      .reduce((sum, [, v]) => sum + v, 0)
-    return { status, count }
-  })
+    row["_total"] = contacts.filter(c => c.lifecyclestage === stage.id).length
+    return row
+  }).filter(row => row["_total"] > 0)
 
-  // ── Stage vs Status cross-table ──
-  const stageStatusMatrix = LIFECYCLE_STAGES
-    .filter(s => s.id !== "other") // keep matrix focused on main stages
-    .map(stage => {
-      const row: Record<string, any> = { stage: stage.label }
-      for (const status of LEAD_STATUS_ORDER) {
-        row[status] = contacts.filter(c =>
-          c.lifecyclestage === stage.id &&
-          normStatus(c.hs_lead_status || "") === normStatus(status)
-        ).length
-      }
-      // Total contacts in this stage (all statuses)
-      row["_total"] = contacts.filter(c => c.lifecyclestage === stage.id).length
-      return row
-    })
-    .filter(row => row["_total"] > 0)
-
-  // ── By owner (split MQL Cold / MQL Hot) ──
-  const ownerMap: Record<string, { name: string; lead: number; mqlCold: number; mqlHot: number; sql: number; opportunity: number; customer: number }> = {}
+  // By owner
+  const ownerMap: Record<string, any> = {}
   for (const c of contacts) {
-    const n = owners[c.hubspot_owner_id] || "Unknown"
-    if (!ownerMap[n]) ownerMap[n] = { name: n, lead: 0, mqlCold: 0, mqlHot: 0, sql: 0, opportunity: 0, customer: 0 }
+    const oid = c.hubspot_owner_id || ""
+    const n = owners[oid] || "Unknown"
+    if (!ownerMap[n]) ownerMap[n] = { name: n, ownerId: oid, lead: 0, mqlCold: 0, mqlHot: 0, sql: 0, opportunity: 0, customer: 0, disqualified: 0 }
     const s = c.lifecyclestage
     if (s === "lead") ownerMap[n].lead++
     else if (s === "marketingqualifiedlead") ownerMap[n].mqlCold++
@@ -420,68 +391,135 @@ async function fetchPipelineData() {
     else if (s === "salesqualifiedlead") ownerMap[n].sql++
     else if (s === "opportunity") ownerMap[n].opportunity++
     else if (s === "customer") ownerMap[n].customer++
+    else if (s === "1874186475") ownerMap[n].disqualified++
   }
-  const byOwner = Object.values(ownerMap).sort((a, b) => (b.customer + b.opportunity) - (a.customer + a.opportunity))
+  const byOwner = Object.values(ownerMap).sort((a: any, b: any) => (b.customer + b.opportunity) - (a.customer + a.opportunity))
 
-  // ── Monthly created ──
+  // Monthly contacts — fixed 18-month window so the current month always appears
   const monthlyMap: Record<string, number> = {}
-  for (const c of contacts) { if (c.createdate) { const m = c.createdate.slice(0, 7); monthlyMap[m] = (monthlyMap[m] || 0) + 1 } }
-  const byMonth = Object.entries(monthlyMap).sort(([a], [b]) => a.localeCompare(b)).slice(-18).map(([month, count]) => ({ month, count }))
+  for (const c of contacts) if (c.createdate) { const m = c.createdate.slice(0, 7); monthlyMap[m] = (monthlyMap[m] || 0) + 1 }
+  const nowDate = new Date(now)
+  const fixedMonths: string[] = []
+  for (let i = 17; i >= 0; i--) {
+    const d = new Date(nowDate.getFullYear(), nowDate.getMonth() - i, 1)
+    fixedMonths.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`)
+  }
+  const byMonth = fixedMonths.map(month => ({ month, count: monthlyMap[month] || 0 }))
 
-  // ── Lead quality ──
+  // Lead quality
   const scoreDistribution = [
-    { bucket: "0–14",   min: 0,  max: 15 },
-    { bucket: "15–39",  min: 15, max: 40 },
-    { bucket: "40–59",  min: 40, max: 60 },
-    { bucket: "60–100", min: 60, max: 10000 },
-  ].map(b => ({
-    bucket: b.bucket,
-    count: contacts.filter(c => { const s = parseFloat(c.hubspotscore); return !isNaN(s) && s >= b.min && s < b.max }).length,
-  }))
-
+    { bucket: "0–14", min: 0, max: 15 }, { bucket: "15–39", min: 15, max: 40 },
+    { bucket: "40–59", min: 40, max: 60 }, { bucket: "60–100", min: 60, max: 10000 },
+  ].map(b => ({ bucket: b.bucket, count: contacts.filter(c => { const s = parseFloat(c.hubspotscore); return !isNaN(s) && s >= b.min && s < b.max }).length }))
   const scoreByStage = LIFECYCLE_STAGES.filter(s => s.id !== "1874186475").map(s => {
     const scores = contacts.filter(c => c.lifecyclestage === s.id && c.hubspotscore).map(c => parseFloat(c.hubspotscore)).filter(n => !isNaN(n))
-    return { stage: s.label, avgScore: scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0, count: scores.length }
+    return { id: s.id, stage: s.label, avgScore: scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0, count: scores.length }
   })
-
   const gradeMap: Record<string, number> = {}
   for (const c of contacts) { const g = (c.global_grade || "Unknown").toUpperCase(); gradeMap[g] = (gradeMap[g] || 0) + 1 }
   const gradeDistribution = Object.entries(gradeMap).sort(([a], [b]) => a.localeCompare(b)).map(([grade, count]) => ({ grade, count }))
-
-  const topScoring = contacts
-    .filter(c => c.hubspotscore && parseFloat(c.hubspotscore) > 0)
-    .sort((a, b) => parseFloat(b.hubspotscore) - parseFloat(a.hubspotscore))
-    .slice(0, 50)
-    .map(c => ({
-      id: c._id,
-      name: [c.firstname, c.lastname].filter(Boolean).join(" ") || c.email || "Unknown",
-      email: c.email || "",
-      score: Math.round(parseFloat(c.hubspotscore)),
-      stage: stageLabel(c.lifecyclestage) || "—",
-      status: c.hs_lead_status || "—",
-      owner: owners[c.hubspot_owner_id] || "—",
-      lastContacted: c.notes_last_contacted || c.hs_last_sales_activity_timestamp || null,
-    }))
-
+  const topScoring = contacts.filter(c => c.hubspotscore && parseFloat(c.hubspotscore) > 0).sort((a, b) => parseFloat(b.hubspotscore) - parseFloat(a.hubspotscore)).slice(0, 50)
+    .map(c => ({ id: c._id, name: [c.firstname, c.lastname].filter(Boolean).join(" ") || c.email || "Unknown", email: c.email || "", score: Math.round(parseFloat(c.hubspotscore)), stage: stageLabel(c.lifecyclestage) || "—", status: c.hs_lead_status || "—", owner: owners[c.hubspot_owner_id] || "—", lastContacted: c.notes_last_contacted || c.hs_last_sales_activity_timestamp || null }))
   const sourceMap: Record<string, { total: number; customers: number }> = {}
-  for (const c of contacts) {
-    const src = c.hs_lead_source || "Unknown"
-    if (!sourceMap[src]) sourceMap[src] = { total: 0, customers: 0 }
-    sourceMap[src].total++
-    if (c.lifecyclestage === "customer") sourceMap[src].customers++
-  }
-  const conversionBySource = Object.entries(sourceMap)
-    .sort(([, a], [, b]) => b.total - a.total)
-    .map(([source, { total, customers }]) => ({ source, total, customers, pct: total > 0 ? Math.round((customers / total) * 100) : 0 }))
-    .slice(0, 15)
-
+  for (const c of contacts) { const src = c.hs_lead_source || "Unknown"; if (!sourceMap[src]) sourceMap[src] = { total: 0, customers: 0 }; sourceMap[src].total++; if (c.lifecyclestage === "customer") sourceMap[src].customers++ }
+  const conversionBySource = Object.entries(sourceMap).sort(([, a], [, b]) => b.total - a.total).map(([source, { total, customers }]) => ({ source, total, customers, pct: total > 0 ? Math.round((customers / total) * 100) : 0 })).slice(0, 15)
   const leadQuality = { scoreDistribution, scoreByStage, gradeDistribution, topScoring, conversionBySource }
 
-  // ── Reinvestering ──
-  const customers = contacts.filter(c => c.lifecyclestage === "customer")
-  let reinvestering = { medianDays: 0, avgDays: 0, reinvestRate: 0, totalCustomers: customers.length, reinvestedCount: 0, within90days: 0, within180days: 0 }
+  return {
+    totalContacts: contacts.length,
+    stageCounts, stageCountsList, avgDaysPerTransition, avgDaysInCurrentStage,
+    funnelData, stuckLeads, stuckPerOwner, nurtureCandidates,
+    leadStatusDistribution, stageStatusMatrix, leadStatusCols: LEAD_STATUS_OPTIONS.map(o => o.label),
+    byOwner, byMonth, leadQuality,
+  }
+}
+
+type ReinvesteringResult = { medianDays: number; avgDays: number; reinvestRate: number; totalCustomers: number; reinvestedCount: number; within90days: number; within180days: number }
+const emptyReinv = (totalCustomers: number): ReinvesteringResult => ({ medianDays: 0, avgDays: 0, reinvestRate: 0, totalCustomers, reinvestedCount: 0, within90days: 0, within180days: 0 })
+function calcReinv(contactDealDates: Record<string, Date[]>, customerIds: Set<string>): ReinvesteringResult {
+  const totalCustomers = customerIds.size
+  const daysToReinvest: number[] = []; let w90 = 0, w180 = 0
+  for (const [cid, dates] of Object.entries(contactDealDates)) {
+    if (!customerIds.has(cid)) continue
+    if (dates.length < 2) continue
+    const sorted = [...dates].sort((a, b) => a.getTime() - b.getTime())
+    const d = (sorted[1].getTime() - sorted[0].getTime()) / 86400000
+    if (d >= 1 && d < 3650) { daysToReinvest.push(d); if (d <= 90) w90++; if (d <= 180) w180++ }
+  }
+  const count = daysToReinvest.length
+  return {
+    medianDays: median(daysToReinvest),
+    avgDays: count ? Math.round(daysToReinvest.reduce((a, b) => a + b, 0) / count) : 0,
+    reinvestRate: totalCustomers ? Math.round((count / totalCustomers) * 100) : 0,
+    totalCustomers, reinvestedCount: count, within90days: w90, within180days: w180,
+  }
+}
+
+async function fetchPipelineData() {
+  console.log("[sync] ── START fetchPipelineData ──")
+  const { names: owners, userIdToOwnerId } = await getOwners()
+  console.log(`[sync] Owners loaded: ${Object.keys(owners).length}`)
+  const teamOwnerIds = await getTeamOwnerIds(userIdToOwnerId)
+  console.log(`[sync] Teams loaded: ${Object.keys(teamOwnerIds).map(k => k + ":" + teamOwnerIds[k].length).join(", ")}`)
+
+  const knownLabelMap: Record<string, string> = {
+    ...Object.fromEntries(LIFECYCLE_STAGES.map(s => [s.id, s.label])),
+    ...EXTRA_STAGE_LABELS,
+  }
+
+  const allContacts = await getAllContacts([
+    "email","firstname","lastname","lifecyclestage","hs_lead_status",
+    "createdate","hs_last_sales_activity_timestamp","hubspot_owner_id","endavu_deal_id","phone","company",
+    "hubspotscore","hs_lead_source","global_grade","notes_last_contacted",
+    "lead_engagement_score_total","hs_analytics_source",
+    "hs_all_assigned_business_unit_ids",
+    "hs_lifecyclestage_lead_date",
+    "hs_lifecyclestage_marketingqualifiedlead_date",
+    "hs_lifecyclestage_salesqualifiedlead_date",
+    "hs_lifecyclestage_opportunity_date",
+    "hs_lifecyclestage_customer_date",
+    "journey_stage",
+  ])
+  const contacts = allContacts.filter(c => !isTestContact(c.email || "") && !c.endavu_deal_id)
+  console.log(`[sync] Total contacts fetched: ${allContacts.length}, after filter: ${contacts.length}`)
+
+  // Fetch lifecycle history once for contacts that passed through MQL Hot
+  const mqlHotIds = contacts
+    .filter(c => ["770940371","salesqualifiedlead","opportunity","customer","evangelist"].includes(c.lifecyclestage))
+    .map(c => c._id)
+  console.log(`[sync] Fetching lifecycle history for ${mqlHotIds.length} MQL Hot+ contacts...`)
+  const lifecycleHistory = await getLifecycleHistory(mqlHotIds)
+  console.log(`[sync] Lifecycle history fetched for ${Object.keys(lifecycleHistory).length} contacts`)
+  const now = Date.now()
+
+  // Global metrics
+  console.log("[sync] Computing global metrics...")
+  const globalMetrics = { ...computeContactMetrics(contacts, owners, knownLabelMap, lifecycleHistory, now), teamOwnerIds }
+  console.log(`[sync] Global metrics done. totalContacts=${globalMetrics.totalContacts}`)
+
+  // Per-brand metrics (reuses the already-fetched history)
+  const _brandsMetrics: Record<string, ReturnType<typeof computeContactMetrics>> = {}
+  for (const [region, brand] of Object.entries(BRAND_IDS)) {
+    const brandContacts = contacts.filter(c => {
+      const buIds = String(c.hs_all_assigned_business_unit_ids || "").split(";").map((s: string) => s.trim())
+      return buIds.includes(brand.id)
+    })
+    console.log(`[sync] Brand ${region} (${brand.id}): ${brandContacts.length} contacts`)
+    if (brandContacts.length === 0) continue
+    const brandContactIds = new Set(brandContacts.map(c => c._id))
+    const brandHistory: Record<string, any[]> = {}
+    for (const [id, hist] of Object.entries(lifecycleHistory)) {
+      if (brandContactIds.has(id)) brandHistory[id] = hist
+    }
+    _brandsMetrics[brand.id] = computeContactMetrics(brandContacts, owners, knownLabelMap, brandHistory, now)
+  }
+
+  const globalCustomerIds = new Set(contacts.filter(c => c.lifecyclestage === "customer").map(c => c._id))
+  let reinvestering: ReinvesteringResult = emptyReinv(globalCustomerIds.size)
+  const contactDealDatesGlobal: Record<string, Date[]> = {}
+
   try {
-    const WON_STAGES = ["497565675","503960545","517811422","766320087","4500113624","4643302624"]
+    const WON_STAGES = ["closedwon","497565675","503960545","517811422","766320087","4500113624","4643302624"]
     const allWonDeals: any[] = []
     for (const stageId of WON_STAGES) {
       let after: string | undefined
@@ -494,7 +532,6 @@ async function fetchPipelineData() {
       await sleep(300)
     }
     const dealIds = allWonDeals.map(d => d.id)
-    const contactDealDates: Record<string, Date[]> = {}
     for (let i = 0; i < dealIds.length; i += 100) {
       await sleep(200)
       try {
@@ -503,23 +540,15 @@ async function fetchPipelineData() {
           const deal = allWonDeals.find(d => d.id === r.from?.id)
           if (!deal?.properties?.closedate) continue
           const cd = new Date(deal.properties.closedate)
-          for (const a of r.to || []) { const cid = String(a.toObjectId || a.id); if (!contactDealDates[cid]) contactDealDates[cid] = []; contactDealDates[cid].push(cd) }
+          for (const a of r.to || []) {
+            const cid = String(a.toObjectId || a.id)
+            if (!contactDealDatesGlobal[cid]) contactDealDatesGlobal[cid] = []
+            contactDealDatesGlobal[cid].push(cd)
+          }
         }
       } catch { /* skip */ }
     }
-    const daysToReinvest: number[] = []; let w90 = 0, w180 = 0
-    for (const dates of Object.values(contactDealDates)) {
-      if (dates.length < 2) continue
-      const sorted = [...dates].sort((a, b) => a.getTime() - b.getTime())
-      const d = (sorted[1].getTime() - sorted[0].getTime()) / 86400000
-      if (d >= 30 && d < 1825) { daysToReinvest.push(d); if (d <= 90) w90++; if (d <= 180) w180++ }
-    }
-    const count = daysToReinvest.length
-    reinvestering = {
-      medianDays: median(daysToReinvest), avgDays: count ? Math.round(daysToReinvest.reduce((a, b) => a + b, 0) / count) : 0,
-      reinvestRate: customers.length ? Math.round((count / customers.length) * 100) : 0,
-      totalCustomers: customers.length, reinvestedCount: count, within90days: w90, within180days: w180,
-    }
+    reinvestering = calcReinv(contactDealDatesGlobal, globalCustomerIds)
   } catch { /* skip */ }
 
   // ── Deal stats ──
@@ -579,24 +608,13 @@ async function fetchPipelineData() {
 
   return {
     fetchedAt: new Date().toISOString(),
-    totalContacts: contacts.length,
-    stageCounts,
-    stageCountsList,
-    avgDaysPerTransition,
-    avgDaysInCurrentStage,
-    funnelData,
-    stuckLeads,
-    stuckPerOwner,
-    nurtureCandidates,
-    leadStatusDistribution,
-    stageStatusMatrix,
-    leadStatusCols: LEAD_STATUS_ORDER,
-    byOwner,
-    byMonth,
+    ...globalMetrics,
     reinvestering,
-    leadQuality,
     dealStats,
     activityByOwner,
+    _brandsMetrics,
+    _contactDealDates: contactDealDatesGlobal,
+    _contacts: contacts,
   }
 }
 
@@ -605,8 +623,44 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   try {
     const data = await fetchPipelineData()
-    await writeCache(data)
-    return NextResponse.json({ ok: true, fetchedAt: data.fetchedAt, contacts: data.totalContacts })
+    const { _brandsMetrics, _contactDealDates, _contacts, ...globalData } = data
+
+    // Write global data (strip internal fields)
+    console.log(`[sync] Writing global cache key: ${CACHE_KEY} (${globalData.totalContacts} contacts)`)
+    await writeCache(CACHE_KEY, globalData)
+    console.log(`[sync] ✓ Global cache written`)
+
+    // Write per-brand data (brand-specific contact metrics + per-brand reinvestment)
+    for (const [region, brand] of Object.entries(BRAND_IDS)) {
+      const brandMetrics = _brandsMetrics[brand.id]
+      if (!brandMetrics) { console.log(`[sync] ⚠ No metrics for brand ${region} (${brand.id}) — skipping`); continue }
+      // Per-brand reinvestment: filter contactDealDates to customers of this brand
+      const brandCustomerIds = new Set(
+        (_contacts || [])
+          .filter((c: any) => c.lifecyclestage === "customer" && String(c.hs_all_assigned_business_unit_ids || "").split(";").map((s: string) => s.trim()).includes(brand.id))
+          .map((c: any) => c._id)
+      )
+      const brandReinvestering = _contactDealDates
+        ? calcReinv(_contactDealDates, brandCustomerIds)
+        : emptyReinv(brandCustomerIds.size)
+      const brandKey = `vk-pipeline-data-${brand.id}`
+      console.log(`[sync] Writing brand cache key: ${brandKey} (${brandMetrics.totalContacts} contacts, ${brandCustomerIds.size} customers)`)
+      await writeCache(brandKey, {
+        fetchedAt: globalData.fetchedAt,
+        dealStats: globalData.dealStats,
+        activityByOwner: globalData.activityByOwner,
+        teamOwnerIds: globalData.teamOwnerIds,
+        reinvestering: brandReinvestering,
+        ...brandMetrics,
+        brand: brand.label,
+        brandId: brand.id,
+        region,
+      })
+      console.log(`[sync] ✓ Brand ${region} written`)
+    }
+
+    console.log("[sync] ── DONE ──")
+    return NextResponse.json({ ok: true, fetchedAt: globalData.fetchedAt, contacts: globalData.totalContacts })
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 })
   }

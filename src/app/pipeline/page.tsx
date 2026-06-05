@@ -60,26 +60,70 @@ const s = {
   rank:    { display:"inline-flex", alignItems:"center", justifyContent:"center", width:20, height:20, borderRadius:"50%", background:"#f0ede6", fontSize:10, fontWeight:700, color:MUTED },
 }
 
-const TABS = ["Lead Pipeline","Deals","Lead Quality","Salesperson","Stuck & At-Risk"]
+const TABS: string[] = [] // No tabs — Contact Pipeline shows all sections directly
+
+// Canonical English lifecycle stage labels — overrides whatever the cache says.
+// IDs verified against HubSpot property settings (some are custom numeric IDs).
+const STAGE_LABELS: Record<string, string> = {
+  lead:                   "Lead",
+  marketingqualifiedlead: "MQL Cold",
+  "770940371":            "MQL Hot",
+  salesqualifiedlead:     "SQL",
+  opportunity:            "Opportunity / Potential Investor",
+  customer:               "Customer / Existing Investor",
+  evangelist:             "Evangelist",
+  "1874186475":           "Disqualified",
+  "3529709812":           "Job Applicant",
+  "773079518":            "Attempted / Connected",
+  other:                  "Other",
+}
+const sl = (id: string, fallback: string) => STAGE_LABELS[id] ?? fallback
 
 // Colors for stage donut chart (one per lifecycle stage slot)
-const STAGE_COLORS_BG = [BD, PD, TD, GD, AD, RD, MUTED+"22", BD+"80", PD+"80"]
-const STAGE_COLORS_BORDER = [BLUE, PURPLE, TEAL, GREEN, AMBER, RED, MUTED, BLUE, PURPLE]
+const STAGE_COLORS_BG = [BLUE+"cc", PURPLE+"cc", TEAL+"cc", GREEN+"cc", AMBER+"cc", RED+"cc", MUTED+"cc", "#1a7fc1cc", "#8b5cf6cc", "#0d9488cc"]
+const STAGE_COLORS_BORDER = [BLUE, PURPLE, TEAL, GREEN, AMBER, RED, MUTED, "#1a7fc1", "#8b5cf6", "#0d9488"]
+
+const BRAND_LABELS: Record<string, string> = {
+  "0":        "Denmark",
+  "17424990": "Sweden",
+  "17893427": "Shipping",
+  "18387361": "Austria",
+  "17065112": "Finland",
+  "17435297": "Norway",
+}
+const REGION_TO_BRAND: Record<string, string> = {
+  dk: "0", se: "17424990", ship: "17893427", at: "18387361", fi: "17065112", no: "17435297"
+}
+
+const PIPELINE_ALLOWED_EMAILS = new Set(["brj@vaekstkapital.dk","tnp@vaekstkapital.dk","sok@vaekstkapital.dk","spo@vaekstkapital.se","acs@vaekstkapital.se"])
 
 export default function PipelinePage() {
-  const { status } = useSession()
+  const { data: session, status } = useSession()
   const router = useRouter()
   const [tab, setTab] = useState(0)
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [chartReady, setChartReady] = useState(false)
+  const [brandId, setBrandId] = useState<string | null>(null)
+  const [filterOwner, setFilterOwner] = useState<string>("all")
 
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/login")
-  }, [status])
+    if (status === "unauthenticated") { router.push("/login"); return }
+    if (status === "authenticated") {
+      const email = session?.user?.email?.toLowerCase() ?? ""
+      const domain = email.split("@")[1] ?? ""
+      const allowed = domain === "vkfunddistribution.com" || domain === "vaekstholdings.com" || PIPELINE_ALLOWED_EMAILS.has(email)
+      if (!allowed) router.push("/")
+    }
+  }, [status, session])
 
   useEffect(() => {
+    if (typeof window === "undefined") return
+    const params = new URLSearchParams(window.location.search)
+    const region = params.get("region")
+    const brand = params.get("brand") ?? (region ? REGION_TO_BRAND[region] : null)
+    if (brand) setBrandId(brand)
     if (typeof window !== "undefined" && (window as any).Chart) { setChartReady(true); return }
     const scr = document.createElement("script")
     scr.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"
@@ -89,37 +133,42 @@ export default function PipelinePage() {
 
   useEffect(() => {
     if (status !== "authenticated") return
-    fetch("/api/pipeline-data")
+    const url = brandId ? `/api/pipeline-data?brand=${brandId}` : "/api/pipeline-data"
+    setFilterOwner("all")
+    fetch(url)
       .then(r => r.json())
       .then(d => { setData(d); setLoading(false) })
       .catch(() => setLoading(false))
-  }, [status])
+  }, [status, brandId])
 
   async function handleSync() {
     setSyncing(true)
     await fetch("/api/pipeline-sync")
-    const res = await fetch("/api/pipeline-data")
+    const url = brandId ? `/api/pipeline-data?brand=${brandId}` : "/api/pipeline-data"
+    const res = await fetch(url)
     const d = await res.json()
     if (!d.error) setData(d)
     setSyncing(false)
   }
 
   useChart("ch-funnel", () => {
-    const fd: any[] = data?.funnelData ?? []
+    const FUNNEL_IDS = ["lead","marketingqualifiedlead","770940371","salesqualifiedlead","opportunity","customer"]
+    // Slice to FUNNEL_IDS.length — old cached data may have extra stale entries (e.g. "Kunde")
+    const fd: any[] = (data?.funnelData ?? []).slice(0, FUNNEL_IDS.length)
+    const labels = fd.map((f: any, i: number) => sl(f.id ?? FUNNEL_IDS[i], f.stage))
     return {
       type: "bar",
-      data: { labels: fd.map(f => f.stage), datasets: [{ data: fd.map(f => f.count), backgroundColor: BLUE, borderRadius: 4, borderSkipped: false }] },
+      data: { labels, datasets: [{ data: fd.map(f => f.count), backgroundColor: BLUE, borderRadius: 4, borderSkipped: false }] },
       options: { indexAxis: "y", responsive: false, plugins: { legend: { display: false }, tooltip: { ...TIP, callbacks: { label: (ctx: any) => ` ${ctx.raw} (${Math.round(ctx.raw / (fd[0]?.count || 1) * 100)}%)` } } }, scales: AXES },
     }
   }, [data, chartReady, tab])
 
   useChart("ch-donut", () => {
-    // Use the ordered stage counts list from the API (data-driven labels)
     const scl: any[] = (data?.stageCountsList ?? []).filter((s: any) => s.count > 0)
     return {
       type: "doughnut",
       data: {
-        labels: scl.map(s => s.label),
+        labels: scl.map(s => sl(s.id, s.label)),
         datasets: [{
           data: scl.map(s => s.count),
           backgroundColor: scl.map((_: any, i: number) => STAGE_COLORS_BG[i % STAGE_COLORS_BG.length]),
@@ -137,18 +186,6 @@ export default function PipelinePage() {
       type: "bar",
       data: { labels: bm.map(m => fmtMo(m.month)), datasets: [{ label: "New Contacts", data: bm.map(m => m.count), backgroundColor: BLUE+"33", borderColor: BLUE, borderWidth: 1.5, borderRadius: 4 }] },
       options: { responsive: false, plugins: { legend: { display: false }, tooltip: TIP }, scales: AXES },
-    }
-  }, [data, chartReady, tab])
-
-  useChart("ch-lead-status", () => {
-    const ls: any[] = data?.leadStatusDistribution ?? []
-    return {
-      type: "bar",
-      data: {
-        labels: ls.map(d => d.status),
-        datasets: [{ data: ls.map(d => d.count), backgroundColor: TEAL+"44", borderColor: TEAL, borderWidth: 1.5, borderRadius: 4, borderSkipped: false }],
-      },
-      options: { indexAxis: "y", responsive: false, plugins: { legend: { display: false }, tooltip: TIP }, scales: AXES },
     }
   }, [data, chartReady, tab])
 
@@ -186,7 +223,7 @@ export default function PipelinePage() {
     const ss: any[] = data?.leadQuality?.scoreByStage ?? []
     return {
       type: "bar",
-      data: { labels: ss.map(s => s.stage), datasets: [{ label: "Avg Score", data: ss.map(s => s.avgScore), backgroundColor: BLUE+"33", borderColor: BLUE, borderWidth: 1.5, borderRadius: 4 }] },
+      data: { labels: ss.map(s => sl(s.id, s.stage)), datasets: [{ label: "Avg Score", data: ss.map(s => s.avgScore), backgroundColor: BLUE+"33", borderColor: BLUE, borderWidth: 1.5, borderRadius: 4 }] },
       options: { responsive: false, plugins: { legend: { display: false }, tooltip: TIP }, scales: AXES },
     }
   }, [data, chartReady, tab])
@@ -205,7 +242,7 @@ export default function PipelinePage() {
     return (
       <div style={s.page}>
         <nav style={s.nav}>
-          <img src="/logo.png" height={22} style={{ filter:"brightness(0) invert(1)", opacity:0.9 }} alt="logo" />
+          <img src="/vaekstkapital-logo.webp" height={22} style={{ filter:"brightness(0) invert(1)", opacity:0.9 }} alt="logo" />
         </nav>
         <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"60vh", gap:12 }}>
           <p style={{ color:MUTED, fontSize:13 }}>Loading pipeline data…</p>
@@ -228,7 +265,15 @@ export default function PipelinePage() {
   return (
     <div style={s.page}>
       <nav style={s.nav}>
-        <img src="/logo.png" height={22} style={{ filter:"brightness(0) invert(1)", opacity:0.9 }} alt="logo" />
+        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+          <a href="/" style={{ display:"flex", alignItems:"center", textDecoration:"none" }}>
+            <img src="/vaekstkapital-logo.webp" height={22} style={{ filter:"brightness(0) invert(1)", opacity:0.9 }} alt="logo" />
+          </a>
+          <span style={{ color:"rgba(255,255,255,.3)", fontSize:12 }}>›</span>
+          <span style={{ color:"rgba(255,255,255,.85)", fontSize:12, fontWeight:600, letterSpacing:".04em" }}>
+            CONTACT PIPELINE{brandId && BRAND_LABELS[brandId] ? ` · ${BRAND_LABELS[brandId].toUpperCase()}` : ""}
+          </span>
+        </div>
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
           {data?.fetchedAt && <span style={{ fontSize:11, color:"rgba(255,255,255,.55)" }}>Synced {fmtDate(data.fetchedAt)}</span>}
           <button onClick={handleSync} disabled={syncing} style={{ background:"rgba(255,255,255,.12)", border:"1px solid rgba(255,255,255,.2)", color:"#fff", borderRadius:6, padding:"5px 12px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
@@ -241,10 +286,6 @@ export default function PipelinePage() {
       </nav>
 
       <div style={s.main}>
-        <div style={s.tabs}>
-          {TABS.map((t, i) => <button key={t} style={tabBtn(i)} onClick={() => setTab(i)}>{t}</button>)}
-        </div>
-
         {!data && (
           <div style={{ ...s.cc, textAlign:"center", padding:40 }}>
             <p style={{ color:MUTED, marginBottom:16, fontSize:13 }}>No data yet. Run a sync to load HubSpot data.</p>
@@ -255,10 +296,17 @@ export default function PipelinePage() {
         )}
 
         {data && (<>
+          {/* UNDER CONSTRUCTION banner */}
+          <div style={{ background:"rgba(224,108,117,.12)", border:"1px solid "+RED, borderRadius:8, padding:"10px 16px", marginBottom:16, display:"flex", alignItems:"center", gap:10 }}>
+            <span style={{ fontSize:11, fontWeight:800, letterSpacing:".12em", textTransform:"uppercase" as const, color:RED }}>⚠ Under Construction</span>
+            <span style={{ fontSize:11, color:RED, opacity:0.8 }}>Data and metrics are being validated — numbers may not yet be accurate.</span>
+          </div>
 
-          {/* ══ TAB 0 — Lead Pipeline ══════════════════════════════════ */}
-          {tab === 0 && (<>
-            <Lbl>KPI · Lead Pipeline · since launch</Lbl>
+          {/* Contact Pipeline — all 11 sections */}
+          {true && (<>
+
+            {/* §1 KPI row */}
+            <Lbl>KPI · Contact Pipeline</Lbl>
             <div style={s.g4}>
               <div style={{ ...s.kpi, borderTop:`3px solid ${GREEN}` }}>
                 <div style={s.kpiLbl}>Total Contacts</div>
@@ -268,83 +316,358 @@ export default function PipelinePage() {
               <div style={{ ...s.kpi, borderTop:`3px solid ${BLUE}` }}>
                 <div style={s.kpiLbl}>Customers / Existing Investors</div>
                 <div style={{ ...s.kpiVal, color:BLUE }}>{fmt(data.stageCounts?.customer || 0)}</div>
-                <div style={s.kpiSub}>{Math.round((data.stageCounts?.customer || 0) / (data.totalContacts || 1) * 100)}% conversion</div>
+                <div style={s.kpiSub}>{Math.round((data.stageCounts?.customer || 0) / (data.totalContacts || 1) * 100)}% of total contacts</div>
               </div>
               <div style={{ ...s.kpi, borderTop:`3px solid ${RED}` }}>
                 <div style={s.kpiLbl}>Stuck Contacts</div>
                 <div style={{ ...s.kpiVal, color:RED }}>{fmt(data.stuckLeads?.length || 0)}</div>
-                <div style={s.kpiSub}>30+ days no stage change</div>
+                <div style={s.kpiSub}>30+ days no progress</div>
               </div>
               <div style={{ ...s.kpi, borderTop:`3px solid ${AMBER}` }}>
-                <div style={s.kpiLbl}>Reinvesting</div>
+                <div style={s.kpiLbl}>Reinvesting Customers</div>
                 <div style={{ ...s.kpiVal, color:AMBER }}>{fmt(data.reinvestering?.reinvestedCount || 0)}</div>
-                <div style={s.kpiSub}>{data.reinvestering?.medianDays || 0} days median · 2+ closed won deals</div>
+                <div style={s.kpiSub}>Median {data.reinvestering?.medianDays || 0} days to reinvest</div>
               </div>
             </div>
 
-            <Lbl>Activation Funnel · Lead → Customer</Lbl>
-            <div style={s.cc}>
-              <div style={s.ccTitle}>Activation Funnel</div>
-              <div style={{ overflowX:"auto", marginTop:12 }}>
-                <canvas id="ch-funnel" width={1100} height={220} style={{ maxWidth:"100%" }} />
-              </div>
-            </div>
-
-            <Lbl>Stage Distribution &amp; Monthly Contacts</Lbl>
+            {/* §2 Activation Funnel + Stage Distribution */}
+            <Lbl>Activation Funnel &amp; Stage Distribution</Lbl>
             <div style={s.g2}>
+              <div style={s.cc}>
+                <div style={s.ccTitle}>Activation Funnel</div>
+                <div style={s.ccSub}>Contacts reaching each lifecycle stage</div>
+                <div style={{ overflowX:"auto", marginTop:12 }}>
+                  <canvas id="ch-funnel" width={520} height={280} style={{ maxWidth:"100%" }} />
+                </div>
+              </div>
               <div style={s.cc}>
                 <div style={s.ccTitle}>Stage Distribution</div>
                 <div style={{ display:"flex", justifyContent:"center", marginTop:12 }}>
                   <canvas id="ch-donut" width={300} height={300} style={{ maxWidth:"100%" }} />
                 </div>
               </div>
-              <div style={s.cc}>
-                <div style={s.ccTitle}>New Contacts / Month (last 18)</div>
-                <div style={{ overflowX:"auto", marginTop:12 }}>
-                  <canvas id="ch-monthly" width={1100} height={200} style={{ maxWidth:"100%" }} />
-                </div>
+            </div>
+
+            {/* §4 New Contacts per Month */}
+            <Lbl>New Contacts per Month</Lbl>
+            <div style={s.cc}>
+              <div style={s.ccTitle}>New contacts per month</div>
+              <div style={s.ccSub}>Last 18 months</div>
+              <div style={{ overflowX:"auto", marginTop:12 }}>
+                <canvas id="ch-monthly" width={1100} height={200} style={{ maxWidth:"100%" }} />
               </div>
             </div>
 
-            <Lbl>Avg Time Between Stages · median days</Lbl>
+            {/* §5 Avg Time Between Stages */}
+            <Lbl>Average Time Between Stages</Lbl>
+            <div style={s.cc}>
+              <div style={s.ccTitle}>Average time between stages</div>
+              <div style={s.ccSub}>Avg / median days — using HubSpot lifecycle stage date properties</div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:10, marginTop:16 }}>
+                {Object.entries(data.avgDaysPerTransition || {}).map(([key, val]: [string, any]) => (
+                  <div key={key} style={{ background:"#f7f5f0", borderRadius:8, padding:"12px 14px", border:"1px solid "+BORDER }}>
+                    <div style={{ fontSize:10, fontWeight:600, color:MUTED, marginBottom:8, letterSpacing:".06em", textTransform:"uppercase" as const, lineHeight:1.4 }}>{key}</div>
+                    {val.count === 0
+                      ? <div style={{ fontSize:12, color:MUTED, fontStyle:"italic" }}>No data yet</div>
+                      : (<>
+                          <div style={{ fontSize:26, fontWeight:700, color:INK, lineHeight:1 }}>{val.avg}</div>
+                          <div style={{ fontSize:11, color:MUTED, marginTop:2 }}>avg days</div>
+                          <div style={{ fontSize:13, fontWeight:600, color:MUTED, marginTop:6 }}>{val.median} median</div>
+                          <div style={{ fontSize:10, color:MUTED, marginTop:2 }}>{val.count} data points</div>
+                        </>)
+                    }
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* §6 Time in Current Stage */}
+            <Lbl>Time in Current Stage</Lbl>
+            <div style={s.cc}>
+              <div style={s.ccTitle}>Time in current stage</div>
+              <div style={s.ccSub}>Avg / median days contacts have been sitting in their current stage</div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(155px,1fr))", gap:10, marginTop:16 }}>
+                {Object.entries(data.avgDaysInCurrentStage || {}).map(([stageId, v]: [string, any]) => {
+                  const bg  = v.median > 90 ? "rgba(224,108,117,.1)" : v.median > 30 ? "rgba(150,128,58,.08)" : "rgba(21,97,76,.08)"
+                  const col = v.median > 90 ? RED : v.median > 30 ? AMBER : GREEN
+                  return (
+                    <div key={stageId} style={{ background:bg, borderRadius:8, padding:"12px 14px", border:`1px solid ${col}33` }}>
+                      <div style={{ fontSize:10, fontWeight:600, color:MUTED, marginBottom:6, letterSpacing:".06em", textTransform:"uppercase" as const }}>{sl(stageId, v.label)}</div>
+                      <div style={{ fontSize:24, fontWeight:700, color:col, lineHeight:1 }}>{v.avg}</div>
+                      <div style={{ fontSize:11, color:MUTED, marginTop:2 }}>avg days</div>
+                      <div style={{ fontSize:13, fontWeight:600, color:col, marginTop:4 }}>{v.median} median</div>
+                      <div style={{ fontSize:10, color:MUTED, marginTop:2 }}>{v.count} contacts</div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* §7 Reinvestment */}
+            <Lbl>Reinvestment</Lbl>
+            <div style={s.g4}>
+              <div style={{ ...s.kpi, borderTop:`3px solid ${AMBER}` }}>
+                <div style={s.kpiLbl}>Reinvesting</div>
+                <div style={{ ...s.kpiVal, color:AMBER }}>{data.reinvestering?.reinvestRate || 0}%</div>
+                <div style={s.kpiSub}>{fmt(data.reinvestering?.reinvestedCount || 0)} customers with 2+ deals</div>
+              </div>
+              <div style={{ ...s.kpi, borderTop:`3px solid ${BLUE}` }}>
+                <div style={s.kpiLbl}>Median Time to 2nd Deal</div>
+                <div style={{ ...s.kpiVal, color:BLUE }}>{data.reinvestering?.medianDays || 0}</div>
+                <div style={s.kpiSub}>{data.reinvestering?.avgDays || 0} days average</div>
+              </div>
+              <div style={{ ...s.kpi, borderTop:`3px solid ${GREEN}` }}>
+                <div style={s.kpiLbl}>Within 90 Days</div>
+                <div style={{ ...s.kpiVal, color:GREEN }}>
+                  {data.reinvestering?.totalCustomers > 0 ? Math.round((data.reinvestering?.within90days || 0) / data.reinvestering.totalCustomers * 100) : 0}%
+                </div>
+                <div style={s.kpiSub}>{fmt(data.reinvestering?.within90days || 0)} customers</div>
+              </div>
+              <div style={{ ...s.kpi, borderTop:`3px solid ${TEAL}` }}>
+                <div style={s.kpiLbl}>Within 180 Days</div>
+                <div style={{ ...s.kpiVal, color:TEAL }}>
+                  {data.reinvestering?.totalCustomers > 0 ? Math.round((data.reinvestering?.within180days || 0) / data.reinvestering.totalCustomers * 100) : 0}%
+                </div>
+                <div style={s.kpiSub}>{fmt(data.reinvestering?.within180days || 0)} customers</div>
+              </div>
+            </div>
+
+            {/* §8 Contacts per Salesperson */}
+            <Lbl>Contacts per Salesperson</Lbl>
+            {/* Brand + Salesperson filters */}
+            {(() => {
+              const teamIds: string[] = brandId && data.teamOwnerIds?.[brandId] ? data.teamOwnerIds[brandId] : []
+              const visibleOwners: any[] = brandId && teamIds.length > 0
+                ? (data.byOwner || []).filter((o: any) => teamIds.includes(o.ownerId))
+                : (data.byOwner || [])
+              return (
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10, flexWrap:"wrap" as const }}>
+              <span style={{ fontSize:11, fontWeight:600, color:MUTED, letterSpacing:".06em", textTransform:"uppercase" as const }}>Brand:</span>
+              {[{ id: null, label: "All" }, ...Object.entries(BRAND_LABELS).map(([id, label]) => ({ id, label }))].map(b => (
+                <button key={String(b.id)} onClick={() => { setBrandId(b.id); setFilterOwner("all") }} style={{ fontSize:11, padding:"4px 10px", borderRadius:6, border:"1px solid "+BORDER, background: brandId === b.id ? INK : "#fff", color: brandId === b.id ? "#fff" : INK, cursor:"pointer", fontFamily:"inherit", fontWeight:600 }}>{b.label}</button>
+              ))}
+              <span style={{ fontSize:11, fontWeight:600, color:MUTED, letterSpacing:".06em", textTransform:"uppercase" as const, marginLeft:8 }}>Salesperson:</span>
+              <select value={filterOwner} onChange={e => setFilterOwner(e.target.value)} style={{ fontSize:11, padding:"4px 10px", borderRadius:6, border:"1px solid "+BORDER, background:"#fff", color:INK, fontFamily:"inherit", cursor:"pointer" }}>
+                <option value="all">All</option>
+                {visibleOwners.map((o: any) => <option key={o.name} value={o.name}>{o.name}</option>)}
+              </select>
+            </div>
+              )
+            })()}
             <div style={s.tcard}>
-              <div style={s.tcardH}><span style={s.tcardT}>Stage Transitions</span><span style={s.tcardS}>based on lifecycle history</span></div>
+              <div style={s.tcardH}><span style={s.tcardT}>Contacts per Salesperson</span><span style={s.tcardS}>by lifecycle stage{brandId && BRAND_LABELS[brandId] ? ` · ${BRAND_LABELS[brandId]}` : ""}{filterOwner !== "all" ? ` · ${filterOwner}` : ""}</span></div>
               <div style={{ overflowX:"auto" }}>
                 <table style={{ width:"100%", borderCollapse:"collapse" }}>
                   <thead><tr>
-                    <th style={s.th}>Stage Transition</th>
-                    <th style={{ ...s.th, textAlign:"right" as const }}>Median Days</th>
-                    <th style={{ ...s.th, textAlign:"right" as const }}>Avg Days</th>
-                    <th style={{ ...s.th, textAlign:"right" as const }}>Sample</th>
+                    <th style={s.th}>Salesperson</th>
+                    <th style={{ ...s.th, textAlign:"right" as const }}>Lead</th>
+                    <th style={{ ...s.th, textAlign:"right" as const }}>MQL Cold</th>
+                    <th style={{ ...s.th, textAlign:"right" as const }}>MQL Hot</th>
+                    <th style={{ ...s.th, textAlign:"right" as const }}>SQL</th>
+                    <th style={{ ...s.th, textAlign:"right" as const }}>Opportunity</th>
+                    <th style={{ ...s.th, textAlign:"right" as const, background:"rgba(21,97,76,.06)" }}>Customer</th>
+                    <th style={{ ...s.th, textAlign:"right" as const }}>Disqualified</th>
+                    <th style={{ ...s.th, textAlign:"right" as const }}>Total</th>
                   </tr></thead>
                   <tbody>
-                    {Object.entries(data.avgDaysPerTransition || {}).map(([key, val]: [string, any]) => (
-                      <tr key={key}>
-                        <td style={s.td}>{key}</td>
-                        <td style={s.tdr}>{val.median}</td>
-                        <td style={s.tdr}>{val.avg}</td>
-                        <td style={s.tdr}>{val.count}</td>
+                    {(() => {
+                      const teamIds: string[] = brandId && data.teamOwnerIds?.[brandId] ? data.teamOwnerIds[brandId] : []
+                      return (data.byOwner || [])
+                        .filter((o: any) => {
+                          if (brandId && teamIds.length > 0 && !teamIds.includes(o.ownerId)) return false
+                          if (filterOwner !== "all" && o.name !== filterOwner) return false
+                          return true
+                        })
+                        .map((o: any) => {
+                          const total = o.lead + (o.mqlCold || 0) + (o.mqlHot || 0) + o.sql + o.opportunity + o.customer + (o.disqualified || 0)
+                          return (
+                            <tr key={o.name}>
+                              <td style={{ ...s.td, fontWeight:600, color:BLUE }}>{o.name}</td>
+                              <td style={s.tdr}>{o.lead}</td>
+                              <td style={s.tdr}>{o.mqlCold || 0}</td>
+                              <td style={s.tdr}>{o.mqlHot || 0}</td>
+                              <td style={s.tdr}>{o.sql}</td>
+                              <td style={s.tdr}>{o.opportunity}</td>
+                              <td style={{ ...s.tdr, color:GREEN, fontWeight:700, background:"rgba(21,97,76,.04)" }}>{o.customer}</td>
+                              <td style={{ ...s.tdr, color:MUTED }}>{o.disqualified || 0}</td>
+                              <td style={{ ...s.tdr, fontWeight:700 }}>{total}</td>
+                            </tr>
+                          )
+                        })
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* §9 Stage × Status cross-table */}
+            <Lbl>Lifecycle Stage × Lead Status Cross-table</Lbl>
+            {(!data.stageStatusMatrix || data.stageStatusMatrix.length === 0) ? (
+              <div style={{ ...s.cc, color:MUTED, fontSize:12, padding:24 }}>No matrix data — run ↻ Sync to populate.</div>
+            ) : (
+            <div style={s.tcard}>
+              <div style={s.tcardH}>
+                <span style={s.tcardT}>Lifecycle Stage × Lead Status Matrix</span>
+                <span style={s.tcardS}>Helps identify misalignments between stage and outreach status</span>
+              </div>
+              <div style={{ overflowX:"auto" }}>
+                <table style={{ width:"100%", borderCollapse:"collapse" }}>
+                  <thead><tr>
+                    <th style={{ ...s.th, minWidth:180 }}>Lifecycle Stage</th>
+                    {(data.leadStatusCols || []).map((col: string) => (
+                      <th key={col} style={{ ...s.th, textAlign:"right" as const, whiteSpace:"nowrap" as const }}>{col}</th>
+                    ))}
+                    <th style={{ ...s.th, textAlign:"right" as const }}>Total</th>
+                  </tr></thead>
+                  <tbody>
+                    {(data.stageStatusMatrix || []).map((row: any) => (
+                      <tr key={row.stage}>
+                        <td style={{ ...s.td, fontWeight:600 }}>{row.stage}</td>
+                        {(data.leadStatusCols || []).map((col: string) => {
+                          const val = row[col] || 0
+                          const unexpected = val > 0 && (
+                            (row.stage === "Customer / Existing Investor" && ["Canvas","Attempting","Connected"].includes(col)) ||
+                            (row.stage === "Lead" && ["Existing Investor","Potential Investor"].includes(col))
+                          )
+                          return (
+                            <td key={col} style={{ ...s.tdr, color: unexpected ? AMBER : val > 0 ? INK : MUTED, fontWeight: val > 0 ? 600 : 400, background: unexpected ? `${AMBER}18` : undefined }}>
+                              {val > 0 ? val : "—"}
+                            </td>
+                          )
+                        })}
+                        <td style={{ ...s.tdr, fontWeight:700, color:BLUE }}>{row["_total"] || 0}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             </div>
+            )}
 
-            <Lbl>Time in Current Stage</Lbl>
-            <div style={s.g4}>
-              {Object.values(data.avgDaysInCurrentStage || {}).map((v: any) => {
-                const hot = v.median > 90
-                return (
-                  <div key={v.label} style={{ ...s.kpi, background: hot ? "rgba(224,108,117,.07)" : "#fff", borderColor: hot ? RED : BORDER }}>
-                    <div style={s.kpiLbl}>{v.label}</div>
-                    <div style={{ ...s.kpiVal, fontSize:28, color: hot ? RED : INK }}>{v.avg}</div>
-                    <div style={s.kpiSub}>avg days · {v.median} median</div>
-                    <div style={{ fontSize:10, color:MUTED, marginTop:2 }}>{v.count} contacts</div>
-                  </div>
-                )
-              })}
+            {/* §10 Stuck Contacts */}
+            <Lbl>Stuck Contacts · 30+ days no progress</Lbl>
+            {/* Brand + Salesperson filters (shared state with §8) */}
+            {(() => {
+              const teamIds10: string[] = brandId && data.teamOwnerIds?.[brandId] ? data.teamOwnerIds[brandId] : []
+              const visibleStuckOwners = [...new Set(
+                (data.stuckLeads || [])
+                  .filter((l: any) => !brandId || teamIds10.length === 0 || teamIds10.includes(l.ownerId))
+                  .map((l: any) => l.owner)
+              )].sort()
+              return (
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10, flexWrap:"wrap" as const }}>
+              <span style={{ fontSize:11, fontWeight:600, color:MUTED, letterSpacing:".06em", textTransform:"uppercase" as const }}>Brand:</span>
+              {[{ id: null, label: "All" }, ...Object.entries(BRAND_LABELS).map(([id, label]) => ({ id, label }))].map(b => (
+                <button key={String(b.id)} onClick={() => { setBrandId(b.id); setFilterOwner("all") }} style={{ fontSize:11, padding:"4px 10px", borderRadius:6, border:"1px solid "+BORDER, background: brandId === b.id ? INK : "#fff", color: brandId === b.id ? "#fff" : INK, cursor:"pointer", fontFamily:"inherit", fontWeight:600 }}>{b.label}</button>
+              ))}
+              <span style={{ fontSize:11, fontWeight:600, color:MUTED, letterSpacing:".06em", textTransform:"uppercase" as const, marginLeft:8 }}>Salesperson:</span>
+              <select value={filterOwner} onChange={e => setFilterOwner(e.target.value)} style={{ fontSize:11, padding:"4px 10px", borderRadius:6, border:"1px solid "+BORDER, background:"#fff", color:INK, fontFamily:"inherit", cursor:"pointer" }}>
+                <option value="all">All</option>
+                {visibleStuckOwners.map((o: any) => <option key={o} value={o}>{o}</option>)}
+              </select>
             </div>
+              )
+            })()}
+            {(() => {
+              const teamIds10: string[] = brandId && data.teamOwnerIds?.[brandId] ? data.teamOwnerIds[brandId] : []
+              const filteredStuck = (data.stuckLeads || []).filter((l: any) => {
+                if (brandId && teamIds10.length > 0 && !teamIds10.includes(l.ownerId)) return false
+                if (filterOwner !== "all" && l.owner !== filterOwner) return false
+                return true
+              })
+              return (
+            <div style={s.tcard}>
+              <div style={s.tcardH}>
+                <span style={s.tcardT}>Stuck Contacts — 30+ days</span>
+                <span style={s.tcardS}>{filteredStuck.length} total{filterOwner !== "all" ? ` · ${filterOwner}` : ""} · excl. Disqualified &amp; Job Applicant</span>
+              </div>
+              <div style={{ overflowX:"auto", maxHeight:520, overflow:"auto" }}>
+                <table style={{ width:"100%", borderCollapse:"collapse" }}>
+                  <thead><tr>
+                    <th style={s.th}>#</th>
+                    <th style={s.th}>Name</th>
+                    <th style={s.th}>Email</th>
+                    <th style={s.th}>Lifecycle Stage</th>
+                    <th style={s.th}>Lead Status</th>
+                    <th style={{ ...s.th, textAlign:"right" as const }}>Days Stuck</th>
+                    <th style={s.th}>Salesperson</th>
+                    <th style={s.th}>Last Contacted</th>
+                    <th style={s.th}>HubSpot</th>
+                  </tr></thead>
+                  <tbody>
+                    {filteredStuck.map((l: any, i: number) => {
+                      const rowBg = l.daysInStage >= 180 ? "rgba(224,108,117,.08)" : "rgba(150,128,58,.05)"
+                      const dayCol = l.daysInStage >= 180 ? RED : AMBER
+                      return (
+                        <tr key={l.id} style={{ background:rowBg }}>
+                          <td style={s.td}><span style={s.rank}>{i + 1}</span></td>
+                          <td style={{ ...s.td, fontWeight:600 }}>{l.name || "—"}</td>
+                          <td style={{ ...s.td, color:MUTED }}>{l.email}</td>
+                          <td style={s.td}>{l.stage}</td>
+                          <td style={{ ...s.td, color:MUTED }}>{l.leadStatus || "—"}</td>
+                          <td style={{ ...s.tdr, color:dayCol, fontWeight:700 }}>{l.daysInStage}</td>
+                          <td style={s.td}>{l.owner}</td>
+                          <td style={{ ...s.td, color:MUTED }}>{fmtDate(l.lastActivity)}</td>
+                          <td style={s.td}>
+                            <a href={`https://app-eu1.hubspot.com/contacts/${PORTAL}/contact/${l.id}`} target="_blank" rel="noreferrer" style={{ color:BLUE, fontWeight:600, textDecoration:"none", fontSize:12 }}>Open ↗</a>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                    {filteredStuck.length === 0 && (
+                      <tr><td colSpan={9} style={{ ...s.td, textAlign:"center" as const, color:MUTED }}>No stuck contacts</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+              )
+            })()}
+
+            {/* §11 Nurture Candidates */}
+            <Lbl>Nurture Candidates · Journey Stage — In Nurturing</Lbl>
+            <div style={s.tcard}>
+              <div style={s.tcardH}>
+                <span style={s.tcardT}>Nurture Candidates</span>
+                <span style={s.tcardS}>{data.nurtureCandidates?.length || 0} contacts · Journey Stage: In Nurturing</span>
+              </div>
+              <div style={{ overflowX:"auto", maxHeight:440, overflow:"auto" }}>
+                <table style={{ width:"100%", borderCollapse:"collapse" }}>
+                  <thead><tr>
+                    <th style={s.th}>#</th>
+                    <th style={s.th}>Name</th>
+                    <th style={s.th}>Email</th>
+                    <th style={s.th}>Lifecycle Stage</th>
+                    <th style={s.th}>Lead Status</th>
+                    <th style={s.th}>Journey Stage</th>
+                    <th style={s.th}>Owner</th>
+                    <th style={s.th}>Last Contacted</th>
+                    <th style={s.th}>HubSpot</th>
+                  </tr></thead>
+                  <tbody>
+                    {(data.nurtureCandidates || []).map((c: any, i: number) => (
+                      <tr key={c.id}>
+                        <td style={s.td}><span style={s.rank}>{i + 1}</span></td>
+                        <td style={{ ...s.td, fontWeight:600 }}>{c.name || "—"}</td>
+                        <td style={{ ...s.td, color:MUTED }}>{c.email}</td>
+                        <td style={s.td}>{c.stage}</td>
+                        <td style={{ ...s.td, color:MUTED }}>{c.leadStatus || "—"}</td>
+                        <td style={{ ...s.td, color:TEAL, fontWeight:600 }}>{c.journeyStage || "—"}</td>
+                        <td style={s.td}>{c.owner}</td>
+                        <td style={{ ...s.td, color:MUTED }}>{fmtDate(c.lastContacted)}</td>
+                        <td style={s.td}>
+                          <a href={`https://app-eu1.hubspot.com/contacts/${PORTAL}/contact/${c.id}`} target="_blank" rel="noreferrer" style={{ color:BLUE, fontWeight:600, textDecoration:"none", fontSize:12 }}>Open ↗</a>
+                        </td>
+                      </tr>
+                    ))}
+                    {(data.nurtureCandidates || []).length === 0 && (
+                      <tr><td colSpan={9} style={{ ...s.td, textAlign:"center" as const, color:MUTED }}>No contacts in Journey Stage "In Nurturing"</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
           </>)}
 
           {/* ══ TAB 1 — Deals ══════════════════════════════════════════ */}
@@ -442,9 +765,9 @@ export default function PipelinePage() {
             </div>
           </>)}
 
-          {/* ══ TAB 2 — Lead Quality ═══════════════════════════════════ */}
+          {/* ══ TAB 2 — Contact Quality ════════════════════════════════ */}
           {tab === 2 && (<>
-            <Lbl>Lead Scoring Distribution</Lbl>
+            <Lbl>Contact Scoring Distribution</Lbl>
             <div style={s.g2}>
               <div style={s.cc}>
                 <div style={s.ccTitle}>Score Buckets</div>
