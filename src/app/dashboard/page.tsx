@@ -764,8 +764,9 @@ export default function Dashboard() {
   // Domain-based access control
   const userEmail = session?.user?.email?.toLowerCase() ?? ""
   const userDomain = userEmail.split("@")[1] ?? ""
-  const PIPELINE_ALLOWED = new Set(["brj@vaekstkapital.dk","tnp@vaekstkapital.dk","sok@vaekstkapital.dk","spo@vaekstkapital.se","acs@vaekstkapital.se"])
-  const canAccessPipeline = userDomain === "vkfunddistribution.com" || userDomain === "vaekstholdings.com" || PIPELINE_ALLOWED.has(userEmail)
+  const PIPELINE_ALLOWED = new Set(["brj@vaekstkapital.dk","tnp@vaekstkapital.dk","sok@vaekstkapital.dk","aro@vaekstkapital.dk","sts@vaekstkapital.dk","spo@vaekstkapital.se","acs@vaekstkapital.se","nry@vaekstkapital.se"])
+  const isAdminDomain     = userDomain === "vkfunddistribution.com" || userDomain === "vaekstholdings.com"
+  const canAccessPipeline = isAdminDomain || userDomain === "vaekstkapital.at" || PIPELINE_ALLOWED.has(userEmail)
   const canAccessDK   = ["vaekstkapital.dk", "vkfunddistribution.com", "vaekstholdings.com"].includes(userDomain)
   const canAccessSE   = ["vaekstkapital.se", "vkfunddistribution.com", "vaekstholdings.com"].includes(userDomain)
   const canAccessShip = ["vkfunddistribution.com", "vk-shipping.com", "vaekstholdings.com"].includes(userDomain)
@@ -1098,14 +1099,16 @@ export default function Dashboard() {
           <button onClick={() => router.push("/")} style={{cursor:"pointer",border:"1px solid rgba(255,255,255,.25)",fontFamily:"inherit",background:"transparent",padding:"0 12px",height:28,borderRadius:4,fontSize:11,fontWeight:600,letterSpacing:".06em",color:"rgba(255,255,255,.8)"}}>
             ← Go back to Main
           </button>
-          {["vaekstholdings.com","vkfunddistribution.com"].includes(userDomain) && (<>
+          {canAccessPipeline && (
             <button onClick={() => router.push("/investortur")} className="chip" style={{cursor:"pointer",border:"none",fontFamily:"inherit",background:"#15624c",position:"relative",overflow:"hidden",padding:"0",minWidth:110,height:28,borderRadius:4}}>
               <span style={{position:"relative",zIndex:1,display:"flex",alignItems:"center",gap:5,padding:"0 12px",height:"100%",fontSize:11,fontWeight:700,letterSpacing:".06em",color:"#fff"}}>Investor Tour</span>
             </button>
+          )}
+          {isAdminDomain && (
             <button onClick={() => router.push("/salgsrapport")} className="chip" style={{cursor:"pointer",border:"none",fontFamily:"inherit",background:"#1d4ed8",position:"relative",overflow:"hidden",padding:"0",minWidth:110,height:28,borderRadius:4}}>
               <span style={{position:"relative",zIndex:1,display:"flex",alignItems:"center",gap:5,padding:"0 12px",height:"100%",fontSize:11,fontWeight:700,letterSpacing:".06em",color:"#fff"}}>Sales Report</span>
             </button>
-          </>)}
+          )}
           {canAccessPipeline && (()=>{ const brandMap: Record<string,string> = {dk:"0",se:"17424990",ship:"17893427",at:"18387361",fi:"17065112",no:"17435297"}; const b=brandMap[region]; return (
             <button onClick={()=>router.push(b?`/pipeline?brand=${b}`:"/pipeline")} className="chip" style={{cursor:"pointer",border:"none",fontFamily:"inherit",background:"#2d68b0",position:"relative",overflow:"hidden",padding:"0",minWidth:130,height:28,borderRadius:4}}>
               <span style={{position:"relative",zIndex:1,display:"flex",alignItems:"center",gap:5,padding:"0 12px",height:"100%",fontSize:11,fontWeight:700,letterSpacing:".06em",color:"#fff"}}>Contact Pipeline</span>

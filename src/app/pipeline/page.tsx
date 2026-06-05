@@ -95,7 +95,7 @@ const REGION_TO_BRAND: Record<string, string> = {
   dk: "0", se: "17424990", ship: "17893427", at: "18387361", fi: "17065112", no: "17435297"
 }
 
-const PIPELINE_ALLOWED_EMAILS = new Set(["brj@vaekstkapital.dk","tnp@vaekstkapital.dk","sok@vaekstkapital.dk","spo@vaekstkapital.se","acs@vaekstkapital.se"])
+const PIPELINE_ALLOWED_EMAILS = new Set(["brj@vaekstkapital.dk","tnp@vaekstkapital.dk","sok@vaekstkapital.dk","aro@vaekstkapital.dk","sts@vaekstkapital.dk","spo@vaekstkapital.se","acs@vaekstkapital.se","nry@vaekstkapital.se"])
 
 export default function PipelinePage() {
   const { data: session, status } = useSession()
@@ -113,7 +113,7 @@ export default function PipelinePage() {
     if (status === "authenticated") {
       const email = session?.user?.email?.toLowerCase() ?? ""
       const domain = email.split("@")[1] ?? ""
-      const allowed = domain === "vkfunddistribution.com" || domain === "vaekstholdings.com" || PIPELINE_ALLOWED_EMAILS.has(email)
+      const allowed = domain === "vkfunddistribution.com" || domain === "vaekstholdings.com" || domain === "vaekstkapital.at" || PIPELINE_ALLOWED_EMAILS.has(email)
       if (!allowed) router.push("/")
     }
   }, [status, session])
