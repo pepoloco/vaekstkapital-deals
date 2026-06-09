@@ -23,18 +23,6 @@ const MONTH_LABELS: Record<string,string> = {
 }
 const PORTAL = "144061788"
 
-const PHONE_SALES_TEAM = [
-  "Alexander Roijen",
-  "Brian Jensen",
-  "Frank Willis Eilersen",
-  "Jan Erik Dahl Hansen",
-  "Mathias Bro Jensen",
-  "Mikkel Lauridsen",
-  "Ole Krabbe",
-  "Thomas Thallaug",
-  "Tobias Pedersen",
-]
-
 const C = {
   G: "#15624c", Gd: "rgba(21,97,76,.12)",
   P: "#5a4998", Pd: "rgba(90,73,152,.12)",
@@ -195,15 +183,19 @@ export default function Dashboard() {
     return (["dk","se","ship","at","fi","no"].includes(p ?? "") ? p : "dk") as "dk"|"se"|"ship"|"at"|"fi"|"no"
   })
   const [pipelineModal, setPipelineModal] = useState<{title: string, deals: any[], fmtAmt?: (n: number) => string} | null>(null)
+  // YTD defaults — Jan 1 of current year → today
+  const _ytdFrom = `${new Date().getFullYear()}-01-01`
+  const _ytdTo   = new Date().toISOString().split("T")[0]
   // SE Sweden state
   const [seClosedDeals, setSeClosedDeals] = useState<any>(null)
   const [seOpenDeals, setSeOpenDeals] = useState<any>(null)
-  const [seC1From, setSeC1From] = useState<string>("")
-  const [seC1To, setSeC1To]     = useState<string>("")
+  const [seC1From, setSeC1From] = useState<string>(_ytdFrom)
+  const [seC1To, setSeC1To]     = useState<string>(_ytdTo)
   const [seC1Stage, setSeC1Stage]       = useState<string>("")
   const [seC1Pipeline, setSeC1Pipeline] = useState<string>("")
   const [seC1Owner, setSeC1Owner]       = useState<string>("")
   const [seClosedDealsLoading, setSeClosedDealsLoading] = useState<boolean>(false)
+  const [seDealsTriggered, setSeDealsTriggered] = useState<boolean>(false)
   const seClosedTimerRef = useRef<any>(null)
   const [seFundDateFrom, setSeFundDateFrom] = useState<string>("")
   const [seFundDateTo, setSeFundDateTo]     = useState<string>("")
@@ -214,12 +206,13 @@ export default function Dashboard() {
   // Ship (Shipping) state
   const [shipClosedDeals, setShipClosedDeals] = useState<any>(null)
   const [shipOpenDeals, setShipOpenDeals] = useState<any>(null)
-  const [shipC1From, setShipC1From] = useState<string>("")
-  const [shipC1To, setShipC1To]     = useState<string>("")
+  const [shipC1From, setShipC1From] = useState<string>(_ytdFrom)
+  const [shipC1To, setShipC1To]     = useState<string>(_ytdTo)
   const [shipC1Stage, setShipC1Stage]       = useState<string>("")
   const [shipC1Pipeline, setShipC1Pipeline] = useState<string>("")
   const [shipC1Owner, setShipC1Owner]       = useState<string>("")
   const [shipClosedDealsLoading, setShipClosedDealsLoading] = useState<boolean>(false)
+  const [shipDealsTriggered, setShipDealsTriggered] = useState<boolean>(false)
   const shipClosedTimerRef = useRef<any>(null)
   const [shipFundDateFrom, setShipFundDateFrom] = useState<string>("")
   const [shipFundDateTo, setShipFundDateTo]     = useState<string>("")
@@ -230,12 +223,13 @@ export default function Dashboard() {
   // AT (Austria) state
   const [atClosedDeals, setAtClosedDeals] = useState<any>(null)
   const [atOpenDeals, setAtOpenDeals] = useState<any>(null)
-  const [atC1From, setAtC1From] = useState<string>("")
-  const [atC1To, setAtC1To]     = useState<string>("")
+  const [atC1From, setAtC1From] = useState<string>(_ytdFrom)
+  const [atC1To, setAtC1To]     = useState<string>(_ytdTo)
   const [atC1Stage, setAtC1Stage]       = useState<string>("")
   const [atC1Pipeline, setAtC1Pipeline] = useState<string>("")
   const [atC1Owner, setAtC1Owner]       = useState<string>("")
   const [atClosedDealsLoading, setAtClosedDealsLoading] = useState<boolean>(false)
+  const [atDealsTriggered, setAtDealsTriggered] = useState<boolean>(false)
   const atClosedTimerRef = useRef<any>(null)
   const [atFundDateFrom, setAtFundDateFrom] = useState<string>("")
   const [atFundDateTo, setAtFundDateTo]     = useState<string>("")
@@ -246,12 +240,13 @@ export default function Dashboard() {
   // FI (Finland) state
   const [fiClosedDeals, setFiClosedDeals] = useState<any>(null)
   const [fiOpenDeals, setFiOpenDeals] = useState<any>(null)
-  const [fiC1From, setFiC1From] = useState<string>("")
-  const [fiC1To, setFiC1To]     = useState<string>("")
+  const [fiC1From, setFiC1From] = useState<string>(_ytdFrom)
+  const [fiC1To, setFiC1To]     = useState<string>(_ytdTo)
   const [fiC1Stage, setFiC1Stage]       = useState<string>("")
   const [fiC1Pipeline, setFiC1Pipeline] = useState<string>("")
   const [fiC1Owner, setFiC1Owner]       = useState<string>("")
   const [fiClosedDealsLoading, setFiClosedDealsLoading] = useState<boolean>(false)
+  const [fiDealsTriggered, setFiDealsTriggered] = useState<boolean>(false)
   const fiClosedTimerRef = useRef<any>(null)
   const [fiFundDateFrom, setFiFundDateFrom] = useState<string>("")
   const [fiFundDateTo, setFiFundDateTo]     = useState<string>("")
@@ -262,12 +257,13 @@ export default function Dashboard() {
   // NO (Norway) state
   const [noClosedDeals, setNoClosedDeals] = useState<any>(null)
   const [noOpenDeals, setNoOpenDeals] = useState<any>(null)
-  const [noC1From, setNoC1From] = useState<string>("")
-  const [noC1To, setNoC1To]     = useState<string>("")
+  const [noC1From, setNoC1From] = useState<string>(_ytdFrom)
+  const [noC1To, setNoC1To]     = useState<string>(_ytdTo)
   const [noC1Stage, setNoC1Stage]       = useState<string>("")
   const [noC1Pipeline, setNoC1Pipeline] = useState<string>("")
   const [noC1Owner, setNoC1Owner]       = useState<string>("")
   const [noClosedDealsLoading, setNoClosedDealsLoading] = useState<boolean>(false)
+  const [noDealsTriggered, setNoDealsTriggered] = useState<boolean>(false)
   const noClosedTimerRef = useRef<any>(null)
   const [noFundDateFrom, setNoFundDateFrom] = useState<string>("")
   const [noFundDateTo, setNoFundDateTo]     = useState<string>("")
@@ -276,8 +272,8 @@ export default function Dashboard() {
   const noFundTimerRef = useRef<any>(null)
   const [noExpandedFund, setNoExpandedFund] = useState<string|null>(null)
   // Section 1 — Deals Closed (filters by close date)
-  const [c1From, setC1From]         = useState<string>("")
-  const [c1To, setC1To]             = useState<string>("")
+  const [c1From, setC1From]         = useState<string>(_ytdFrom)
+  const [c1To, setC1To]             = useState<string>(_ytdTo)
   const [c1Stage, setC1Stage]       = useState<string>("")
   const [c1Status, setC1Status]     = useState<string>("")
   const [c1Pipeline, setC1Pipeline] = useState<string>("")
@@ -340,7 +336,7 @@ export default function Dashboard() {
     setClosedDealsLoading(true)
     clearTimeout(closedDealsTimerRef.current)
     // no debounce on initial load; debounce only when user is typing dates
-    const delay = (c1From || c1To) ? 800 : 0
+    const delay = (c1From === _ytdFrom && c1To === _ytdTo) ? 0 : 800
     closedDealsTimerRef.current = setTimeout(async () => {
       try {
         const res = await fetch(`/api/closed-deals?from=${from}&to=${to}`)
@@ -409,14 +405,14 @@ export default function Dashboard() {
 
   // SE closed deals (live, date-filtered)
   useEffect(() => {
-    if (status !== "authenticated" || region !== "se") return
+    if (status !== "authenticated" || region !== "se" || !seDealsTriggered) return
     const ytdFrom = `${new Date().getFullYear()}-01-01`
     const ytdTo   = new Date().toISOString().split("T")[0]
     const from = seC1From || ytdFrom
     const to   = seC1To   || ytdTo
     setSeClosedDealsLoading(true)
     clearTimeout(seClosedTimerRef.current)
-    const delay = (seC1From || seC1To) ? 800 : 0
+    const delay = (seC1From === _ytdFrom && seC1To === _ytdTo) ? 0 : 800
     seClosedTimerRef.current = setTimeout(async () => {
       try {
         const res = await fetch(`/api/se-closed-deals?from=${from}&to=${to}`)
@@ -426,7 +422,7 @@ export default function Dashboard() {
       setSeClosedDealsLoading(false)
     }, delay)
     return () => clearTimeout(seClosedTimerRef.current)
-  }, [status, region, seC1From, seC1To])
+  }, [status, region, seC1From, seC1To, seDealsTriggered])
 
   // SE open deals (pipeline report)
   useEffect(() => {
@@ -457,14 +453,14 @@ export default function Dashboard() {
 
   // Ship closed deals
   useEffect(() => {
-    if (status !== "authenticated" || region !== "ship") return
+    if (status !== "authenticated" || region !== "ship" || !shipDealsTriggered) return
     const ytdFrom = `${new Date().getFullYear()}-01-01`
     const ytdTo   = new Date().toISOString().split("T")[0]
     const from = shipC1From || ytdFrom
     const to   = shipC1To   || ytdTo
     setShipClosedDealsLoading(true)
     clearTimeout(shipClosedTimerRef.current)
-    const delay = (shipC1From || shipC1To) ? 800 : 0
+    const delay = (shipC1From === _ytdFrom && shipC1To === _ytdTo) ? 0 : 800
     shipClosedTimerRef.current = setTimeout(async () => {
       try {
         const res = await fetch(`/api/ship-closed-deals?from=${from}&to=${to}`)
@@ -474,7 +470,7 @@ export default function Dashboard() {
       setShipClosedDealsLoading(false)
     }, delay)
     return () => clearTimeout(shipClosedTimerRef.current)
-  }, [status, region, shipC1From, shipC1To])
+  }, [status, region, shipC1From, shipC1To, shipDealsTriggered])
 
   // Ship open deals
   useEffect(() => {
@@ -505,14 +501,14 @@ export default function Dashboard() {
 
   // AT closed deals
   useEffect(() => {
-    if (status !== "authenticated" || region !== "at") return
+    if (status !== "authenticated" || region !== "at" || !atDealsTriggered) return
     const ytdFrom = `${new Date().getFullYear()}-01-01`
     const ytdTo   = new Date().toISOString().split("T")[0]
     const from = atC1From || ytdFrom
     const to   = atC1To   || ytdTo
     setAtClosedDealsLoading(true)
     clearTimeout(atClosedTimerRef.current)
-    const delay = (atC1From || atC1To) ? 800 : 0
+    const delay = (atC1From === _ytdFrom && atC1To === _ytdTo) ? 0 : 800
     atClosedTimerRef.current = setTimeout(async () => {
       try {
         const res = await fetch(`/api/at-closed-deals?from=${from}&to=${to}`)
@@ -522,7 +518,7 @@ export default function Dashboard() {
       setAtClosedDealsLoading(false)
     }, delay)
     return () => clearTimeout(atClosedTimerRef.current)
-  }, [status, region, atC1From, atC1To])
+  }, [status, region, atC1From, atC1To, atDealsTriggered])
 
   // AT open deals
   useEffect(() => {
@@ -553,14 +549,14 @@ export default function Dashboard() {
 
   // FI closed deals
   useEffect(() => {
-    if (status !== "authenticated" || region !== "fi") return
+    if (status !== "authenticated" || region !== "fi" || !fiDealsTriggered) return
     const ytdFrom = `${new Date().getFullYear()}-01-01`
     const ytdTo   = new Date().toISOString().split("T")[0]
     const from = fiC1From || ytdFrom
     const to   = fiC1To   || ytdTo
     setFiClosedDealsLoading(true)
     clearTimeout(fiClosedTimerRef.current)
-    const delay = (fiC1From || fiC1To) ? 800 : 0
+    const delay = (fiC1From === _ytdFrom && fiC1To === _ytdTo) ? 0 : 800
     fiClosedTimerRef.current = setTimeout(async () => {
       try {
         const res = await fetch(`/api/fi-closed-deals?from=${from}&to=${to}`)
@@ -570,7 +566,7 @@ export default function Dashboard() {
       setFiClosedDealsLoading(false)
     }, delay)
     return () => clearTimeout(fiClosedTimerRef.current)
-  }, [status, region, fiC1From, fiC1To])
+  }, [status, region, fiC1From, fiC1To, fiDealsTriggered])
 
   // FI open deals
   useEffect(() => {
@@ -601,14 +597,14 @@ export default function Dashboard() {
 
   // NO closed deals
   useEffect(() => {
-    if (status !== "authenticated" || region !== "no") return
+    if (status !== "authenticated" || region !== "no" || !noDealsTriggered) return
     const ytdFrom = `${new Date().getFullYear()}-01-01`
     const ytdTo   = new Date().toISOString().split("T")[0]
     const from = noC1From || ytdFrom
     const to   = noC1To   || ytdTo
     setNoClosedDealsLoading(true)
     clearTimeout(noClosedTimerRef.current)
-    const delay = (noC1From || noC1To) ? 800 : 0
+    const delay = (noC1From === _ytdFrom && noC1To === _ytdTo) ? 0 : 800
     noClosedTimerRef.current = setTimeout(async () => {
       try {
         const res = await fetch(`/api/no-closed-deals?from=${from}&to=${to}`)
@@ -618,7 +614,7 @@ export default function Dashboard() {
       setNoClosedDealsLoading(false)
     }, delay)
     return () => clearTimeout(noClosedTimerRef.current)
-  }, [status, region, noC1From, noC1To])
+  }, [status, region, noC1From, noC1To, noDealsTriggered])
 
   // NO open deals
   useEffect(() => {
@@ -899,7 +895,7 @@ export default function Dashboard() {
   const uniq = (arr: string[]) => [...new Set(arr)].filter(Boolean).sort()
   const statusOpts   = uniq(allVnDeals.map((d: any) => d.subscriptionStatus).filter((s: string) => s !== "—"))
   const pipelineOpts = uniq(allVnDeals.map((d: any) => d.pipeline))
-  const ownerOpts    = PHONE_SALES_TEAM
+  const ownerOpts    = uniq(allVnDeals.map((d: any) => d.owner).filter((o: string) => o && o !== "—"))
   const hasFilter1   = !!(c1From || c1To || c1Stage || c1Status || c1Pipeline || c1Owner)
 
   // SE computed values
@@ -1267,7 +1263,7 @@ export default function Dashboard() {
             </select>
           </div>
           {hasFilter1 && (
-            <button onClick={() => { setC1From(""); setC1To(""); setC1Stage(""); setC1Status(""); setC1Pipeline(""); setC1Owner("") }}
+            <button onClick={() => { setC1From(_ytdFrom); setC1To(_ytdTo); setC1Stage(""); setC1Status(""); setC1Pipeline(""); setC1Owner("") }}
               style={{fontSize:11,fontWeight:600,padding:"6px 14px",border:"1px solid var(--bdr)",borderRadius:4,background:"transparent",cursor:"pointer",color:"var(--ink3)",fontFamily:"inherit",alignSelf:"flex-end"}}>
               Clear filter
             </button>
@@ -1964,9 +1960,9 @@ export default function Dashboard() {
           <div style={{display:"flex",flexDirection:"column",gap:4}}>
             <span style={lblStyle}>Close Date</span>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <input type="date" value={seC1From} onChange={e => setSeC1From(e.target.value)} style={{fontSize:12,padding:"6px 10px",border:"1px solid var(--bdr)",borderRadius:4,fontFamily:"inherit",color:"var(--ink2)",background:"#fff"}} />
+              <input type="date" value={seC1From} onChange={e => { setSeC1From(e.target.value); setSeDealsTriggered(true) }} style={{fontSize:12,padding:"6px 10px",border:"1px solid var(--bdr)",borderRadius:4,fontFamily:"inherit",color:"var(--ink2)",background:"#fff"}} />
               <span style={{color:"var(--ink3)"}}>—</span>
-              <input type="date" value={seC1To} onChange={e => setSeC1To(e.target.value)} style={{fontSize:12,padding:"6px 10px",border:"1px solid var(--bdr)",borderRadius:4,fontFamily:"inherit",color:"var(--ink2)",background:"#fff"}} />
+              <input type="date" value={seC1To} onChange={e => { setSeC1To(e.target.value); setSeDealsTriggered(true) }} style={{fontSize:12,padding:"6px 10px",border:"1px solid var(--bdr)",borderRadius:4,fontFamily:"inherit",color:"var(--ink2)",background:"#fff"}} />
             </div>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:4}}>
@@ -1998,16 +1994,21 @@ export default function Dashboard() {
             </div>
           )}
           {seHasFilter && (
-            <button onClick={() => { setSeC1From(""); setSeC1To(""); setSeC1Stage(""); setSeC1Pipeline(""); setSeC1Owner("") }}
+            <button onClick={() => { setSeC1From(_ytdFrom); setSeC1To(_ytdTo); setSeC1Stage(""); setSeC1Pipeline(""); setSeC1Owner("") }}
               style={{fontSize:11,fontWeight:600,padding:"6px 14px",border:"1px solid var(--bdr)",borderRadius:4,background:"transparent",cursor:"pointer",color:"var(--ink3)",fontFamily:"inherit",alignSelf:"flex-end"}}>
               Clear filter
             </button>
           )}
         </div>
 
-        {seClosedDealsLoading && (
+        {!seDealsTriggered ? (
+          <button onClick={() => setSeDealsTriggered(true)}
+            style={{display:"inline-flex",alignItems:"center",gap:8,fontSize:12,fontWeight:600,padding:"10px 22px",border:"none",borderRadius:6,background:"#1d4ed8",color:"#fff",cursor:"pointer",fontFamily:"inherit",marginBottom:8,letterSpacing:".03em"}}>
+            Load Deals
+          </button>
+        ) : seClosedDealsLoading ? (
           <div style={{padding:"14px 16px",fontSize:12,color:"var(--ink3)",background:"rgba(45,104,176,.04)",borderRadius:6,marginBottom:8}}>Loading SE deals from HubSpot…</div>
-        )}
+        ) : null}
 
         <div className="tcard" style={{marginTop:8}}>
           <div className="tcard-head">
@@ -2217,9 +2218,9 @@ export default function Dashboard() {
           <div style={{display:"flex",flexDirection:"column",gap:4}}>
             <span style={lblStyle}>Close Date</span>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <input type="date" value={shipC1From} onChange={e => setShipC1From(e.target.value)} style={{fontSize:12,padding:"6px 10px",border:"1px solid var(--bdr)",borderRadius:4,fontFamily:"inherit",color:"var(--ink2)",background:"#fff"}} />
+              <input type="date" value={shipC1From} onChange={e => { setShipC1From(e.target.value); setShipDealsTriggered(true) }} style={{fontSize:12,padding:"6px 10px",border:"1px solid var(--bdr)",borderRadius:4,fontFamily:"inherit",color:"var(--ink2)",background:"#fff"}} />
               <span style={{color:"var(--ink3)"}}>—</span>
-              <input type="date" value={shipC1To} onChange={e => setShipC1To(e.target.value)} style={{fontSize:12,padding:"6px 10px",border:"1px solid var(--bdr)",borderRadius:4,fontFamily:"inherit",color:"var(--ink2)",background:"#fff"}} />
+              <input type="date" value={shipC1To} onChange={e => { setShipC1To(e.target.value); setShipDealsTriggered(true) }} style={{fontSize:12,padding:"6px 10px",border:"1px solid var(--bdr)",borderRadius:4,fontFamily:"inherit",color:"var(--ink2)",background:"#fff"}} />
             </div>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:4}}>
@@ -2251,16 +2252,21 @@ export default function Dashboard() {
             </div>
           )}
           {shipHasFilter && (
-            <button onClick={() => { setShipC1From(""); setShipC1To(""); setShipC1Stage(""); setShipC1Pipeline(""); setShipC1Owner("") }}
+            <button onClick={() => { setShipC1From(_ytdFrom); setShipC1To(_ytdTo); setShipC1Stage(""); setShipC1Pipeline(""); setShipC1Owner("") }}
               style={{fontSize:11,fontWeight:600,padding:"6px 14px",border:"1px solid var(--bdr)",borderRadius:4,background:"transparent",cursor:"pointer",color:"var(--ink3)",fontFamily:"inherit",alignSelf:"flex-end"}}>
               Clear filter
             </button>
           )}
         </div>
 
-        {shipClosedDealsLoading && (
+        {!shipDealsTriggered ? (
+          <button onClick={() => setShipDealsTriggered(true)}
+            style={{display:"inline-flex",alignItems:"center",gap:8,fontSize:12,fontWeight:600,padding:"10px 22px",border:"none",borderRadius:6,background:"#1d4ed8",color:"#fff",cursor:"pointer",fontFamily:"inherit",marginBottom:8,letterSpacing:".03em"}}>
+            Load Deals
+          </button>
+        ) : shipClosedDealsLoading ? (
           <div style={{padding:"14px 16px",fontSize:12,color:"var(--ink3)",background:"rgba(90,73,152,.04)",borderRadius:6,marginBottom:8}}>Loading Shipping deals from HubSpot…</div>
-        )}
+        ) : null}
 
         <div className="tcard" style={{marginTop:8}}>
           <div className="tcard-head">
@@ -2440,9 +2446,9 @@ export default function Dashboard() {
           <div style={{display:"flex",flexDirection:"column",gap:4}}>
             <span style={lblStyle}>Close Date</span>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <input type="date" value={atC1From} onChange={e => setAtC1From(e.target.value)} style={{fontSize:12,padding:"6px 10px",border:"1px solid var(--bdr)",borderRadius:4,fontFamily:"inherit",color:"var(--ink2)",background:"#fff"}} />
+              <input type="date" value={atC1From} onChange={e => { setAtC1From(e.target.value); setAtDealsTriggered(true) }} style={{fontSize:12,padding:"6px 10px",border:"1px solid var(--bdr)",borderRadius:4,fontFamily:"inherit",color:"var(--ink2)",background:"#fff"}} />
               <span style={{color:"var(--ink3)"}}>—</span>
-              <input type="date" value={atC1To} onChange={e => setAtC1To(e.target.value)} style={{fontSize:12,padding:"6px 10px",border:"1px solid var(--bdr)",borderRadius:4,fontFamily:"inherit",color:"var(--ink2)",background:"#fff"}} />
+              <input type="date" value={atC1To} onChange={e => { setAtC1To(e.target.value); setAtDealsTriggered(true) }} style={{fontSize:12,padding:"6px 10px",border:"1px solid var(--bdr)",borderRadius:4,fontFamily:"inherit",color:"var(--ink2)",background:"#fff"}} />
             </div>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:4}}>
@@ -2474,16 +2480,21 @@ export default function Dashboard() {
             </div>
           )}
           {atHasFilter && (
-            <button onClick={() => { setAtC1From(""); setAtC1To(""); setAtC1Stage(""); setAtC1Pipeline(""); setAtC1Owner("") }}
+            <button onClick={() => { setAtC1From(_ytdFrom); setAtC1To(_ytdTo); setAtC1Stage(""); setAtC1Pipeline(""); setAtC1Owner("") }}
               style={{fontSize:11,fontWeight:600,padding:"6px 14px",border:"1px solid var(--bdr)",borderRadius:4,background:"transparent",cursor:"pointer",color:"var(--ink3)",fontFamily:"inherit",alignSelf:"flex-end"}}>
               Clear filter
             </button>
           )}
         </div>
 
-        {atClosedDealsLoading && (
+        {!atDealsTriggered ? (
+          <button onClick={() => setAtDealsTriggered(true)}
+            style={{display:"inline-flex",alignItems:"center",gap:8,fontSize:12,fontWeight:600,padding:"10px 22px",border:"none",borderRadius:6,background:"#1d4ed8",color:"#fff",cursor:"pointer",fontFamily:"inherit",marginBottom:8,letterSpacing:".03em"}}>
+            Load Deals
+          </button>
+        ) : atClosedDealsLoading ? (
           <div style={{padding:"14px 16px",fontSize:12,color:"var(--ink3)",background:"rgba(150,128,58,.04)",borderRadius:6,marginBottom:8}}>Loading Austria deals from HubSpot…</div>
-        )}
+        ) : null}
 
         <div className="tcard" style={{marginTop:8}}>
           <div className="tcard-head">
@@ -2663,9 +2674,9 @@ export default function Dashboard() {
           <div style={{display:"flex",flexDirection:"column",gap:4}}>
             <span style={lblStyle}>Close Date</span>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <input type="date" value={fiC1From} onChange={e => setFiC1From(e.target.value)} style={{fontSize:12,padding:"6px 10px",border:"1px solid var(--bdr)",borderRadius:4,fontFamily:"inherit",color:"var(--ink2)",background:"#fff"}} />
+              <input type="date" value={fiC1From} onChange={e => { setFiC1From(e.target.value); setFiDealsTriggered(true) }} style={{fontSize:12,padding:"6px 10px",border:"1px solid var(--bdr)",borderRadius:4,fontFamily:"inherit",color:"var(--ink2)",background:"#fff"}} />
               <span style={{color:"var(--ink3)"}}>—</span>
-              <input type="date" value={fiC1To} onChange={e => setFiC1To(e.target.value)} style={{fontSize:12,padding:"6px 10px",border:"1px solid var(--bdr)",borderRadius:4,fontFamily:"inherit",color:"var(--ink2)",background:"#fff"}} />
+              <input type="date" value={fiC1To} onChange={e => { setFiC1To(e.target.value); setFiDealsTriggered(true) }} style={{fontSize:12,padding:"6px 10px",border:"1px solid var(--bdr)",borderRadius:4,fontFamily:"inherit",color:"var(--ink2)",background:"#fff"}} />
             </div>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:4}}>
@@ -2697,16 +2708,21 @@ export default function Dashboard() {
             </div>
           )}
           {fiHasFilter && (
-            <button onClick={() => { setFiC1From(""); setFiC1To(""); setFiC1Stage(""); setFiC1Pipeline(""); setFiC1Owner("") }}
+            <button onClick={() => { setFiC1From(_ytdFrom); setFiC1To(_ytdTo); setFiC1Stage(""); setFiC1Pipeline(""); setFiC1Owner("") }}
               style={{fontSize:11,fontWeight:600,padding:"6px 14px",border:"1px solid var(--bdr)",borderRadius:4,background:"transparent",cursor:"pointer",color:"var(--ink3)",fontFamily:"inherit",alignSelf:"flex-end"}}>
               Clear filter
             </button>
           )}
         </div>
 
-        {fiClosedDealsLoading && (
+        {!fiDealsTriggered ? (
+          <button onClick={() => setFiDealsTriggered(true)}
+            style={{display:"inline-flex",alignItems:"center",gap:8,fontSize:12,fontWeight:600,padding:"10px 22px",border:"none",borderRadius:6,background:"#1d4ed8",color:"#fff",cursor:"pointer",fontFamily:"inherit",marginBottom:8,letterSpacing:".03em"}}>
+            Load Deals
+          </button>
+        ) : fiClosedDealsLoading ? (
           <div style={{padding:"14px 16px",fontSize:12,color:"var(--ink3)",background:"rgba(45,104,176,.04)",borderRadius:6,marginBottom:8}}>Loading Finland deals from HubSpot…</div>
-        )}
+        ) : null}
 
         <div className="tcard" style={{marginTop:8}}>
           <div className="tcard-head">
@@ -2887,9 +2903,9 @@ export default function Dashboard() {
           <div style={{display:"flex",flexDirection:"column",gap:4}}>
             <span style={lblStyle}>Close Date</span>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <input type="date" value={noC1From} onChange={e => setNoC1From(e.target.value)} style={{fontSize:12,padding:"6px 10px",border:"1px solid var(--bdr)",borderRadius:4,fontFamily:"inherit",color:"var(--ink2)",background:"#fff"}} />
+              <input type="date" value={noC1From} onChange={e => { setNoC1From(e.target.value); setNoDealsTriggered(true) }} style={{fontSize:12,padding:"6px 10px",border:"1px solid var(--bdr)",borderRadius:4,fontFamily:"inherit",color:"var(--ink2)",background:"#fff"}} />
               <span style={{color:"var(--ink3)"}}>—</span>
-              <input type="date" value={noC1To} onChange={e => setNoC1To(e.target.value)} style={{fontSize:12,padding:"6px 10px",border:"1px solid var(--bdr)",borderRadius:4,fontFamily:"inherit",color:"var(--ink2)",background:"#fff"}} />
+              <input type="date" value={noC1To} onChange={e => { setNoC1To(e.target.value); setNoDealsTriggered(true) }} style={{fontSize:12,padding:"6px 10px",border:"1px solid var(--bdr)",borderRadius:4,fontFamily:"inherit",color:"var(--ink2)",background:"#fff"}} />
             </div>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:4}}>
@@ -2921,16 +2937,21 @@ export default function Dashboard() {
             </div>
           )}
           {noHasFilter && (
-            <button onClick={() => { setNoC1From(""); setNoC1To(""); setNoC1Stage(""); setNoC1Pipeline(""); setNoC1Owner("") }}
+            <button onClick={() => { setNoC1From(_ytdFrom); setNoC1To(_ytdTo); setNoC1Stage(""); setNoC1Pipeline(""); setNoC1Owner("") }}
               style={{fontSize:11,fontWeight:600,padding:"6px 14px",border:"1px solid var(--bdr)",borderRadius:4,background:"transparent",cursor:"pointer",color:"var(--ink3)",fontFamily:"inherit",alignSelf:"flex-end"}}>
               Clear filter
             </button>
           )}
         </div>
 
-        {noClosedDealsLoading && (
+        {!noDealsTriggered ? (
+          <button onClick={() => setNoDealsTriggered(true)}
+            style={{display:"inline-flex",alignItems:"center",gap:8,fontSize:12,fontWeight:600,padding:"10px 22px",border:"none",borderRadius:6,background:"#1d4ed8",color:"#fff",cursor:"pointer",fontFamily:"inherit",marginBottom:8,letterSpacing:".03em"}}>
+            Load Deals
+          </button>
+        ) : noClosedDealsLoading ? (
           <div style={{padding:"14px 16px",fontSize:12,color:"var(--ink3)",background:"rgba(185,28,28,.04)",borderRadius:6,marginBottom:8}}>Loading Norway deals from HubSpot…</div>
-        )}
+        ) : null}
 
         <div className="tcard" style={{marginTop:8}}>
           <div className="tcard-head">

@@ -5,13 +5,27 @@ import { useSession, signOut } from "next-auth/react"
 import { useRouter } from "next/navigation"
 
 const PORTAL = "144061788"
-const ADMIN_DOMAINS = ["vaekstholdings.com", "vkfunddistribution.com"]
-const ADMIN_EMAILS  = ["brj@vaekstkapital.dk", "sts@vaekstkapital.dk"]
-const isAdmin = (email?: string | null) =>
-  !!email && (
-    ADMIN_DOMAINS.includes(email?.split("@")[1]?.toLowerCase() ?? "") ||
-    ADMIN_EMAILS.includes(email.toLowerCase())
-  )
+const ADMIN_DOMAINS = new Set(["vaekstholdings.com", "vkfunddistribution.com"])
+const DK_EXCEPTIONS = new Set(["brj@vaekstkapital.dk","tnp@vaekstkapital.dk","sok@vaekstkapital.dk","aro@vaekstkapital.dk","sts@vaekstkapital.dk"])
+const SE_EXCEPTIONS = new Set(["spo@vaekstkapital.se","acs@vaekstkapital.se","nry@vaekstkapital.se"])
+
+const isAdmin = (email?: string | null) => {
+  if (!email) return false
+  const lc = email.toLowerCase()
+  const domain = lc.split("@")[1] ?? ""
+  return ADMIN_DOMAINS.has(domain) || domain === "vaekstkapital.at" || DK_EXCEPTIONS.has(lc) || SE_EXCEPTIONS.has(lc)
+}
+
+// Returns which country columns this user may see ("DK" | "SE")[]
+function getAllowedCountries(email?: string | null): Array<"DK" | "SE"> {
+  if (!email) return []
+  const lc = email.toLowerCase()
+  const domain = lc.split("@")[1] ?? ""
+  if (ADMIN_DOMAINS.has(domain) || domain === "vaekstkapital.at") return ["DK", "SE"]
+  if (SE_EXCEPTIONS.has(lc) || domain === "vaekstkapital.se") return ["SE"]
+  if (DK_EXCEPTIONS.has(lc) || domain === "vaekstkapital.dk") return ["DK"]
+  return ["DK", "SE"]
+}
 
 const fmtAmt = (n: number, currency = "DKK") =>
   new Intl.NumberFormat("en-DK", { maximumFractionDigits: 0 }).format(n) + " " + currency
@@ -493,9 +507,9 @@ export default function InvestorturPage() {
         <div style={{ fontSize: 13, color: "var(--ink3)", textAlign: "center", maxWidth: 360 }}>
           The Investor Tour report is only available to VaekstHoldings and VK Fund Distribution users.
         </div>
-        <button onClick={() => router.push("/dashboard")}
+        <button onClick={() => router.push("/")}
           style={{ marginTop: 8, padding: "8px 20px", borderRadius: 6, border: "1px solid var(--bdr)", background: "var(--card)", color: "var(--ink2)", fontSize: 13, cursor: "pointer" }}>
-          ← Back to Dashboard
+          ← Back to Main Menu
         </button>
       </div>
     )
@@ -521,9 +535,9 @@ export default function InvestorturPage() {
                 ← Back to Investor Tours
               </button>
             )}
-            <button onClick={() => router.push("/dashboard")}
+            <button onClick={() => router.push("/")}
               style={{ padding: "7px 14px", borderRadius: 6, border: "1px solid var(--bdr)", background: "var(--card)", color: "var(--ink2)", fontSize: 12, cursor: "pointer" }}>
-              Dashboard
+              Main Menu
             </button>
             <button onClick={() => signOut({ callbackUrl: "/login" })}
               style={{ padding: "7px 14px", borderRadius: 6, border: "1px solid var(--bdr)", background: "var(--card)", color: "var(--ink3)", fontSize: 12, cursor: "pointer" }}>
@@ -547,8 +561,9 @@ export default function InvestorturPage() {
               {error && <div style={{ color: "#b91c1c", fontSize: 11, marginTop: 8, maxWidth: 500, margin: "8px auto 0" }}>{error}</div>}
             </div>
           ) : (() => {
-            const dk = campaigns.filter(c => c.country === "DK")
-            const se = campaigns.filter(c => c.country === "SE")
+            const allowedCountries = getAllowedCountries(session?.user?.email)
+            const dk = allowedCountries.includes("DK") ? campaigns.filter(c => c.country === "DK") : null
+            const se = allowedCountries.includes("SE") ? campaigns.filter(c => c.country === "SE") : null
             const colStyle: React.CSSProperties = { flex: "1 1 0", minWidth: 0 }
             const colHeader = (label: string, flag: string, count: number): React.ReactNode => (
               <div style={{
@@ -562,27 +577,23 @@ export default function InvestorturPage() {
                 </div>
               </div>
             )
+            const renderCol = (items: Campaign[], label: string, flag: string, empty: string) => (
+              <div style={colStyle}>
+                {colHeader(label, flag, items.length)}
+                {items.length === 0
+                  ? <div style={{ color: "var(--ink3)", fontSize: 12, fontStyle: "italic" }}>{empty}</div>
+                  : <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {items.map(c => <CampaignCard key={c.id} c={c} summary={summaries[c.id]} summaryLoading={summaryLoading[c.id]} onClick={() => openCampaign(c)} />)}
+                    </div>
+                }
+              </div>
+            )
+            const showBoth = dk !== null && se !== null
             return (
               <div style={{ display: "flex", gap: 28, alignItems: "flex-start" }}>
-                <div style={colStyle}>
-                  {colHeader("Denmark", "🇩🇰", dk.length)}
-                  {dk.length === 0
-                    ? <div style={{ color: "var(--ink3)", fontSize: 12, fontStyle: "italic" }}>No Denmark tours found</div>
-                    : <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                        {dk.map(c => <CampaignCard key={c.id} c={c} summary={summaries[c.id]} summaryLoading={summaryLoading[c.id]} onClick={() => openCampaign(c)} />)}
-                      </div>
-                  }
-                </div>
-                <div style={{ width: 1, background: "var(--bdr)", alignSelf: "stretch", flexShrink: 0 }} />
-                <div style={colStyle}>
-                  {colHeader("Sweden", "🇸🇪", se.length)}
-                  {se.length === 0
-                    ? <div style={{ color: "var(--ink3)", fontSize: 12, fontStyle: "italic" }}>No Sweden tours found</div>
-                    : <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                        {se.map(c => <CampaignCard key={c.id} c={c} summary={summaries[c.id]} summaryLoading={summaryLoading[c.id]} onClick={() => openCampaign(c)} />)}
-                      </div>
-                  }
-                </div>
+                {dk !== null && renderCol(dk, "Denmark", "🇩🇰", "No Denmark tours found")}
+                {showBoth && <div style={{ width: 1, background: "var(--bdr)", alignSelf: "stretch", flexShrink: 0 }} />}
+                {se !== null && renderCol(se, "Sweden", "🇸🇪", "No Sweden tours found")}
               </div>
             )
           })()

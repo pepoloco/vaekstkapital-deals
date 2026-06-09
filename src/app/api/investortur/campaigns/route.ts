@@ -2,14 +2,6 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/authOptions"
 
-const ADMIN_DOMAINS = ["vaekstholdings.com", "vkfunddistribution.com"]
-const ADMIN_EMAILS  = ["brj@vaekstkapital.dk", "sts@vaekstkapital.dk"]
-const isAdmin = (email?: string | null) =>
-  !!email && (
-    ADMIN_DOMAINS.includes(email.split("@")[1]?.toLowerCase() ?? "") ||
-    ADMIN_EMAILS.includes(email.toLowerCase())
-  )
-
 const BASE = "https://api.hubapi.com"
 const KEY = process.env.HUBSPOT_API_KEY!
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -106,7 +98,6 @@ async function getParticipantCount(listId: string): Promise<number> {
 export async function GET() {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (!isAdmin(session.user?.email)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   const seen = new Set<string>()
   const rawLists: ListRaw[] = []

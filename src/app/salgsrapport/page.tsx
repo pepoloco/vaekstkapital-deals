@@ -20,11 +20,11 @@ const YTD_LABEL = TODAY.toLocaleDateString("en-GB", { day: "numeric", month: "sh
 const TABS = [
   { key: "dk",       label: "Denmark",  flagImg: "/dk-flag.jpg",       subtitle: "Phone Sales · DKK",     coac: true  },
   { key: "se",       label: "Sweden",   flagImg: "/se-flag.jpeg",      subtitle: "Phone Sales · SEK",     coac: true  },
-  { key: "at",       label: "Austria",  flagImg: "/austria-flag.webp", subtitle: "Michael Trost · EUR",   coac: true  },
+  { key: "at",       label: "Austria",  flagImg: "/austria-flag.webp", subtitle: "Team Austria · EUR",    coac: true  },
   { key: "shipping", label: "Shipping", flagImg: "/ship-icon.jpg",     subtitle: "All owners · USD",      coac: false },
 ]
 
-// Colour per DK consultant (fixed)
+// Stable colour map — new team members automatically get palette colours via getClr()
 const DK_CLR: Record<string, { bg: string; text: string; light: string }> = {
   "Ole Krabbe":            { bg: "#6d28d9", text: "#fff", light: "#ede9fe" },
   "Brian Jensen":          { bg: "#1d4ed8", text: "#fff", light: "#dbeafe" },
@@ -34,7 +34,6 @@ const DK_CLR: Record<string, { bg: string; text: string; light: string }> = {
   "Mathias Bro Jensen":    { bg: "#0369a1", text: "#fff", light: "#e0f2fe" },
   "Tobias Pedersen":       { bg: "#3730a3", text: "#fff", light: "#e0e7ff" },
   "Jan Erik Dahl Hansen":  { bg: "#c2410c", text: "#fff", light: "#ffedd5" },
-  "Thomas Thallaug":       { bg: "#0f766e", text: "#fff", light: "#ccfbf1" },
 }
 
 // Rotating palette for dynamic regions (SE, Shipping)

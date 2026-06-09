@@ -115,17 +115,6 @@ async function getOwners(): Promise<{ byId: Record<string, string>; byUserId: Re
   return { byId, byUserId }
 }
 
-const PHONE_SALES_TEAM = [
-  "Alexander Roijen",
-  "Brian Jensen",
-  "Frank Willis Eilersen",
-  "Jan Erik Dahl Hansen",
-  "Mathias Bro Jensen",
-  "Mikkel Lauridsen",
-  "Ole Krabbe",
-  "Tobias Pedersen",
-]
-
 async function batchReadCompanies(ids: string[]): Promise<Record<string, string>> {
   if (ids.length === 0) return {}
   const result: Record<string, string> = {}
@@ -208,8 +197,6 @@ export async function fetchAllData() {
     getOwners(),
     getDealPipelines(),
   ])
-  const phoneTeamMembers = PHONE_SALES_TEAM
-
   const contactsInvested = await countObjects("contacts", [{ filters: [{ propertyName: "invested_in_vaekstnet", operator: "EQ", value: "Yes" }] }])
 
   const contactsDetail = await searchAll("contacts",
@@ -531,7 +518,6 @@ const openProps = ["amount", "investment_consultant", "deal_tm_owner", "hubspot_
       funded: vnFunded,
     },
     vnDeals,
-    phoneTeamMembers,
   }
 }
 

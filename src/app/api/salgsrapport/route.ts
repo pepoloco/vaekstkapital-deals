@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/authOptions"
+import { getTeamOwnerNames } from "@/lib/teams"
 
 const ADMIN_DOMAINS = ["vaekstholdings.com", "vkfunddistribution.com"]
 const isAdmin = (email?: string | null) =>
@@ -15,7 +16,7 @@ const YEARS = [2024, 2025, 2026]
 type RegionConfig = {
   label: string
   currency: string
-  ownerFilter: string[] | null  // null = all owners with deals
+  teamName: string | null  // null = all owners; string = fetch members of matching HubSpot team
   requireCoac: boolean
 }
 
@@ -23,35 +24,25 @@ const REGIONS: Record<string, RegionConfig> = {
   dk: {
     label: "Denmark · Phone Sales",
     currency: "DKK",
-    ownerFilter: [
-      "Ole Krabbe",
-      "Brian Jensen",
-      "Frank Willis Eilersen",
-      "Alexander Roijen",
-      "Mikkel Lauridsen",
-      "Mathias Bro Jensen",
-      "Tobias Pedersen",
-      "Jan Erik Dahl Hansen",
-      "Thomas Thallaug",
-    ],
+    teamName: "team denmark",
     requireCoac: true,
   },
   se: {
     label: "Sweden · Phone Sales",
     currency: "SEK",
-    ownerFilter: null,
+    teamName: "team sweden",
     requireCoac: true,
   },
   at: {
     label: "Austria",
     currency: "EUR",
-    ownerFilter: ["Michael Trost"],
+    teamName: "team austria",
     requireCoac: true,
   },
   shipping: {
     label: "Shipping",
     currency: "USD",
-    ownerFilter: null,
+    teamName: null,
     requireCoac: false,  // Shipping does not use COACs
   },
 }
@@ -131,7 +122,11 @@ export async function GET(request: Request) {
   const region = (url.searchParams.get("region") ?? "dk").toLowerCase()
   const config = REGIONS[region] ?? REGIONS.dk
 
-  const [allDeals, owners] = await Promise.all([searchDeals(config.currency), getOwners()])
+  const [allDeals, owners, ownerFilter] = await Promise.all([
+    searchDeals(config.currency),
+    getOwners(),
+    config.teamName ? getTeamOwnerNames(config.teamName) : Promise.resolve(null),
+  ])
 
   type Cell = { amount: number; count: number }
   const data: Record<string, Record<number, Record<number, Cell>>> = {}
@@ -143,8 +138,8 @@ export async function GET(request: Request) {
     const rawName = owners[d.hubspot_owner_id]
     if (!rawName) continue
 
-    const consultant = config.ownerFilter
-      ? fuzzyMatch(rawName, config.ownerFilter)
+    const consultant = ownerFilter
+      ? fuzzyMatch(rawName, ownerFilter)
       : rawName
 
     if (!consultant) continue
@@ -164,10 +159,8 @@ export async function GET(request: Request) {
     ownerTotals[consultant] = (ownerTotals[consultant] ?? 0) + amount
   }
 
-  // Fixed lists keep specified order; dynamic lists sort by total desc
-  const consultants = config.ownerFilter
-    ? config.ownerFilter.filter(c => data[c])
-    : Object.keys(ownerTotals).sort((a, b) => ownerTotals[b] - ownerTotals[a])
+  // Team-sourced lists sort by total desc (same as fully-dynamic regions)
+  const consultants = Object.keys(ownerTotals).sort((a, b) => ownerTotals[b] - ownerTotals[a])
 
   return NextResponse.json({
     region,
