@@ -111,9 +111,11 @@ async function getOwners(): Promise<{ names: Record<string, string>; userIdToOwn
   return { names, userIdToOwnerId }
 }
 
-// Returns: brandId -> Set of ownerIds that belong to that brand's team (parent + all sub-teams)
-async function getTeamOwnerIds(userIdToOwnerId: Record<string, string>): Promise<Record<string, string[]>> {
-  // Matches both parent teams and sub-teams — order matters (longer prefixes first)
+// Returns: brandId -> { ownerIds, ownerNames } for team members (parent + all sub-teams)
+async function getTeamOwnerIds(
+  userIdToOwnerId: Record<string, string>,
+  owners: Record<string, string>
+): Promise<{ teamOwnerIds: Record<string, string[]>; teamOwnerNames: Record<string, string[]> }> {
   const TEAM_PATTERNS: Array<{ prefix: string; brandId: string }> = [
     { prefix: "team denmark",  brandId: "0" },
     { prefix: "bu dk",         brandId: "0" },
@@ -128,21 +130,34 @@ async function getTeamOwnerIds(userIdToOwnerId: Record<string, string>): Promise
     { prefix: "team norway",   brandId: "17435297" },
     { prefix: "bu no",         brandId: "17435297" },
   ]
-  const result: Record<string, Set<string>> = {}
+  const resultIds: Record<string, Set<string>> = {}
+  const resultNames: Record<string, Set<string>> = {}
   try {
     const data = await hsGet("/settings/v3/users/teams?includeMembers=true")
+    console.log(`[sync] Teams API: ${data.results?.length ?? 0} teams found`)
     for (const team of data.results ?? []) {
       const key = (team.name || "").toLowerCase()
       const match = TEAM_PATTERNS.find(p => key.startsWith(p.prefix))
       if (!match) continue
-      if (!result[match.brandId]) result[match.brandId] = new Set()
-      for (const userId of team.userIds ?? []) {
+      if (!resultIds[match.brandId]) { resultIds[match.brandId] = new Set(); resultNames[match.brandId] = new Set() }
+      const userIds: string[] = team.userIds ?? team.memberUserIds ?? []
+      let mapped = 0
+      for (const userId of userIds) {
         const ownerId = userIdToOwnerId[String(userId)]
-        if (ownerId) result[match.brandId].add(ownerId)
+        if (ownerId) {
+          resultIds[match.brandId].add(ownerId)
+          const name = owners[ownerId]
+          if (name) resultNames[match.brandId].add(name)
+          mapped++
+        }
       }
+      console.log(`[sync]   "${team.name}" → brandId=${match.brandId}, members=${userIds.length}, mapped to owners=${mapped}`)
     }
   } catch (e) { console.error("[sync] getTeamOwnerIds error:", e) }
-  return Object.fromEntries(Object.entries(result).map(([k, v]) => [k, Array.from(v)]))
+  const teamOwnerIds = Object.fromEntries(Object.entries(resultIds).map(([k, v]) => [k, Array.from(v)]))
+  const teamOwnerNames = Object.fromEntries(Object.entries(resultNames).map(([k, v]) => [k, Array.from(v)]))
+  console.log(`[sync] Team summary: ${Object.keys(teamOwnerIds).map(k => k + ":" + (teamOwnerIds[k].length) + " owners").join(", ")}`)
+  return { teamOwnerIds, teamOwnerNames }
 }
 
 async function getDealStageNames(): Promise<Record<string, string>> {
@@ -459,8 +474,7 @@ async function fetchPipelineData() {
   console.log("[sync] ── START fetchPipelineData ──")
   const { names: owners, userIdToOwnerId } = await getOwners()
   console.log(`[sync] Owners loaded: ${Object.keys(owners).length}`)
-  const teamOwnerIds = await getTeamOwnerIds(userIdToOwnerId)
-  console.log(`[sync] Teams loaded: ${Object.keys(teamOwnerIds).map(k => k + ":" + teamOwnerIds[k].length).join(", ")}`)
+  const { teamOwnerIds, teamOwnerNames } = await getTeamOwnerIds(userIdToOwnerId, owners)
 
   const knownLabelMap: Record<string, string> = {
     ...Object.fromEntries(LIFECYCLE_STAGES.map(s => [s.id, s.label])),
@@ -494,7 +508,7 @@ async function fetchPipelineData() {
 
   // Global metrics
   console.log("[sync] Computing global metrics...")
-  const globalMetrics = { ...computeContactMetrics(contacts, owners, knownLabelMap, lifecycleHistory, now), teamOwnerIds }
+  const globalMetrics = { ...computeContactMetrics(contacts, owners, knownLabelMap, lifecycleHistory, now), teamOwnerIds, teamOwnerNames }
   console.log(`[sync] Global metrics done. totalContacts=${globalMetrics.totalContacts}`)
 
   // Per-brand metrics (reuses the already-fetched history)
@@ -505,7 +519,6 @@ async function fetchPipelineData() {
       return buIds.includes(brand.id)
     })
     console.log(`[sync] Brand ${region} (${brand.id}): ${brandContacts.length} contacts`)
-    if (brandContacts.length === 0) continue
     const brandContactIds = new Set(brandContacts.map(c => c._id))
     const brandHistory: Record<string, any[]> = {}
     for (const [id, hist] of Object.entries(lifecycleHistory)) {
@@ -633,7 +646,7 @@ export async function GET() {
     // Write per-brand data (brand-specific contact metrics + per-brand reinvestment)
     for (const [region, brand] of Object.entries(BRAND_IDS)) {
       const brandMetrics = _brandsMetrics[brand.id]
-      if (!brandMetrics) { console.log(`[sync] ⚠ No metrics for brand ${region} (${brand.id}) — skipping`); continue }
+      if (!brandMetrics) { console.log(`[sync] ⚠ No metrics for brand ${region} (${brand.id}) — writing empty cache`); }
       // Per-brand reinvestment: filter contactDealDates to customers of this brand
       const brandCustomerIds = new Set(
         (_contacts || [])
@@ -644,12 +657,13 @@ export async function GET() {
         ? calcReinv(_contactDealDates, brandCustomerIds)
         : emptyReinv(brandCustomerIds.size)
       const brandKey = `vk-pipeline-data-${brand.id}`
-      console.log(`[sync] Writing brand cache key: ${brandKey} (${brandMetrics.totalContacts} contacts, ${brandCustomerIds.size} customers)`)
+      console.log(`[sync] Writing brand cache key: ${brandKey} (${brandMetrics?.totalContacts ?? 0} contacts, ${brandCustomerIds.size} customers)`)
       await writeCache(brandKey, {
         fetchedAt: globalData.fetchedAt,
         dealStats: globalData.dealStats,
         activityByOwner: globalData.activityByOwner,
         teamOwnerIds: globalData.teamOwnerIds,
+        teamOwnerNames: globalData.teamOwnerNames,
         reinvestering: brandReinvestering,
         ...brandMetrics,
         brand: brand.label,

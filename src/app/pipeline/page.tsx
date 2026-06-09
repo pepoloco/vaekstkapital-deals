@@ -96,6 +96,13 @@ const REGION_TO_BRAND: Record<string, string> = {
 }
 
 const PIPELINE_ALLOWED_EMAILS = new Set(["brj@vaekstkapital.dk","tnp@vaekstkapital.dk","sok@vaekstkapital.dk","aro@vaekstkapital.dk","sts@vaekstkapital.dk","spo@vaekstkapital.se","acs@vaekstkapital.se","nry@vaekstkapital.se"])
+const ADMIN_DOMAINS = new Set(["vkfunddistribution.com","vaekstholdings.com"])
+// Non-admin domains that have pipeline access → locked to their own brand
+const DOMAIN_TO_BRAND: Record<string, string> = {
+  "vaekstkapital.dk": "0",
+  "vaekstkapital.se": "17424990",
+  "vaekstkapital.at": "18387361",
+}
 
 export default function PipelinePage() {
   const { data: session, status } = useSession()
@@ -105,26 +112,37 @@ export default function PipelinePage() {
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [chartReady, setChartReady] = useState(false)
-  const [brandId, setBrandId] = useState<string | null>(null)
+  // "" = not yet resolved; only fetch once this is a real brand id
+  const [brandId, setBrandId] = useState<string>("")
   const [filterOwner, setFilterOwner] = useState<string>("all")
+  const [isAdmin, setIsAdmin] = useState(false)
 
   useEffect(() => {
     if (status === "unauthenticated") { router.push("/login"); return }
     if (status === "authenticated") {
       const email = session?.user?.email?.toLowerCase() ?? ""
       const domain = email.split("@")[1] ?? ""
-      const allowed = domain === "vkfunddistribution.com" || domain === "vaekstholdings.com" || domain === "vaekstkapital.at" || PIPELINE_ALLOWED_EMAILS.has(email)
-      if (!allowed) router.push("/")
+      const allowed = ADMIN_DOMAINS.has(domain) || domain === "vaekstkapital.at" || PIPELINE_ALLOWED_EMAILS.has(email)
+      if (!allowed) { router.push("/"); return }
+      const admin = ADMIN_DOMAINS.has(domain)
+      setIsAdmin(admin)
+      if (!admin) {
+        // Non-admins locked to their own brand
+        const lockedBrand = DOMAIN_TO_BRAND[domain]
+        setBrandId(lockedBrand ?? "0")
+      } else {
+        // Admins: use URL param brand if present, otherwise Denmark
+        const params = new URLSearchParams(window.location.search)
+        const region = params.get("region")
+        const urlBrand = params.get("brand") ?? (region ? REGION_TO_BRAND[region] : null)
+        setBrandId(urlBrand ?? "0")
+      }
     }
   }, [status, session])
 
   useEffect(() => {
     if (typeof window === "undefined") return
-    const params = new URLSearchParams(window.location.search)
-    const region = params.get("region")
-    const brand = params.get("brand") ?? (region ? REGION_TO_BRAND[region] : null)
-    if (brand) setBrandId(brand)
-    if (typeof window !== "undefined" && (window as any).Chart) { setChartReady(true); return }
+    if ((window as any).Chart) { setChartReady(true); return }
     const scr = document.createElement("script")
     scr.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"
     scr.onload = () => setChartReady(true)
@@ -132,8 +150,8 @@ export default function PipelinePage() {
   }, [])
 
   useEffect(() => {
-    if (status !== "authenticated") return
-    const url = brandId ? `/api/pipeline-data?brand=${brandId}` : "/api/pipeline-data"
+    if (status !== "authenticated" || brandId === "") return
+    const url = `/api/pipeline-data?brand=${brandId}`
     setFilterOwner("all")
     fetch(url)
       .then(r => r.json())
@@ -273,6 +291,9 @@ export default function PipelinePage() {
           <span style={{ color:"rgba(255,255,255,.85)", fontSize:12, fontWeight:600, letterSpacing:".04em" }}>
             CONTACT PIPELINE{brandId && BRAND_LABELS[brandId] ? ` · ${BRAND_LABELS[brandId].toUpperCase()}` : ""}
           </span>
+          <a href="/" style={{ textDecoration:"none", border:"1px solid rgba(255,255,255,.25)", background:"transparent", padding:"0 12px", height:28, borderRadius:4, fontSize:11, fontWeight:600, letterSpacing:".06em", color:"rgba(255,255,255,.8)", display:"flex", alignItems:"center", cursor:"pointer" }}>
+            ← Go Back
+          </a>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
           {data?.fetchedAt && <span style={{ fontSize:11, color:"rgba(255,255,255,.55)" }}>Synced {fmtDate(data.fetchedAt)}</span>}
@@ -302,6 +323,16 @@ export default function PipelinePage() {
             <span style={{ fontSize:11, color:RED, opacity:0.8 }}>Data and metrics are being validated — numbers may not yet be accurate.</span>
           </div>
 
+          {/* Global Brand filter — admins only */}
+          {isAdmin && (
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:20, flexWrap:"wrap" as const }}>
+              <span style={{ fontSize:11, fontWeight:700, color:MUTED, letterSpacing:".08em", textTransform:"uppercase" as const }}>Brand:</span>
+              {Object.entries(BRAND_LABELS).map(([id, label]) => (
+                <button key={id} onClick={() => { setBrandId(id); setFilterOwner("all") }} style={{ fontSize:11, padding:"5px 12px", borderRadius:6, border:"1px solid "+(brandId === id ? INK : BORDER), background: brandId === id ? INK : "#fff", color: brandId === id ? "#fff" : INK, cursor:"pointer", fontFamily:"inherit", fontWeight:600, transition:"all .12s" }}>{label}</button>
+              ))}
+            </div>
+          )}
+
           {/* Contact Pipeline — all 11 sections */}
           {true && (<>
 
@@ -311,7 +342,7 @@ export default function PipelinePage() {
               <div style={{ ...s.kpi, borderTop:`3px solid ${GREEN}` }}>
                 <div style={s.kpiLbl}>Total Contacts</div>
                 <div style={{ ...s.kpiVal, color:GREEN }}>{fmt(data.totalContacts)}</div>
-                <div style={s.kpiSub}>Excl. VaekstNet brand</div>
+                <div style={s.kpiSub}>{data.brandId ? `Brand: ${data.brand ?? data.brandId}` : "Unique contacts across all brands"}</div>
               </div>
               <div style={{ ...s.kpi, borderTop:`3px solid ${BLUE}` }}>
                 <div style={s.kpiLbl}>Customers / Existing Investors</div>
@@ -434,19 +465,17 @@ export default function PipelinePage() {
 
             {/* §8 Contacts per Salesperson */}
             <Lbl>Contacts per Salesperson</Lbl>
-            {/* Brand + Salesperson filters */}
+            {/* Salesperson filter */}
             {(() => {
-              const teamIds: string[] = brandId && data.teamOwnerIds?.[brandId] ? data.teamOwnerIds[brandId] : []
-              const visibleOwners: any[] = brandId && teamIds.length > 0
-                ? (data.byOwner || []).filter((o: any) => teamIds.includes(o.ownerId))
+              const teamIds: string[] = data.teamOwnerIds?.[brandId] ?? []
+              const teamNames: string[] = data.teamOwnerNames?.[brandId] ?? []
+              const hasTeam = teamIds.length > 0 || teamNames.length > 0
+              const visibleOwners: any[] = hasTeam
+                ? (data.byOwner || []).filter((o: any) => teamIds.includes(o.ownerId) || teamNames.includes(o.name))
                 : (data.byOwner || [])
               return (
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10, flexWrap:"wrap" as const }}>
-              <span style={{ fontSize:11, fontWeight:600, color:MUTED, letterSpacing:".06em", textTransform:"uppercase" as const }}>Brand:</span>
-              {[{ id: null, label: "All" }, ...Object.entries(BRAND_LABELS).map(([id, label]) => ({ id, label }))].map(b => (
-                <button key={String(b.id)} onClick={() => { setBrandId(b.id); setFilterOwner("all") }} style={{ fontSize:11, padding:"4px 10px", borderRadius:6, border:"1px solid "+BORDER, background: brandId === b.id ? INK : "#fff", color: brandId === b.id ? "#fff" : INK, cursor:"pointer", fontFamily:"inherit", fontWeight:600 }}>{b.label}</button>
-              ))}
-              <span style={{ fontSize:11, fontWeight:600, color:MUTED, letterSpacing:".06em", textTransform:"uppercase" as const, marginLeft:8 }}>Salesperson:</span>
+              <span style={{ fontSize:11, fontWeight:600, color:MUTED, letterSpacing:".06em", textTransform:"uppercase" as const }}>Salesperson:</span>
               <select value={filterOwner} onChange={e => setFilterOwner(e.target.value)} style={{ fontSize:11, padding:"4px 10px", borderRadius:6, border:"1px solid "+BORDER, background:"#fff", color:INK, fontFamily:"inherit", cursor:"pointer" }}>
                 <option value="all">All</option>
                 {visibleOwners.map((o: any) => <option key={o.name} value={o.name}>{o.name}</option>)}
@@ -471,10 +500,12 @@ export default function PipelinePage() {
                   </tr></thead>
                   <tbody>
                     {(() => {
-                      const teamIds: string[] = brandId && data.teamOwnerIds?.[brandId] ? data.teamOwnerIds[brandId] : []
+                      const teamIds: string[] = data.teamOwnerIds?.[brandId] ?? []
+                      const teamNames: string[] = data.teamOwnerNames?.[brandId] ?? []
+                      const hasTeam = teamIds.length > 0 || teamNames.length > 0
                       return (data.byOwner || [])
                         .filter((o: any) => {
-                          if (brandId && teamIds.length > 0 && !teamIds.includes(o.ownerId)) return false
+                          if (hasTeam && !teamIds.includes(o.ownerId) && !teamNames.includes(o.name)) return false
                           if (filterOwner !== "all" && o.name !== filterOwner) return false
                           return true
                         })
@@ -546,21 +577,19 @@ export default function PipelinePage() {
 
             {/* §10 Stuck Contacts */}
             <Lbl>Stuck Contacts · 30+ days no progress</Lbl>
-            {/* Brand + Salesperson filters (shared state with §8) */}
+            {/* Salesperson filter */}
             {(() => {
-              const teamIds10: string[] = brandId && data.teamOwnerIds?.[brandId] ? data.teamOwnerIds[brandId] : []
+              const teamIds10: string[] = data.teamOwnerIds?.[brandId] ?? []
+              const teamNames10: string[] = data.teamOwnerNames?.[brandId] ?? []
+              const hasTeam10 = teamIds10.length > 0 || teamNames10.length > 0
               const visibleStuckOwners = [...new Set(
                 (data.stuckLeads || [])
-                  .filter((l: any) => !brandId || teamIds10.length === 0 || teamIds10.includes(l.ownerId))
+                  .filter((l: any) => !hasTeam10 || teamIds10.includes(l.ownerId) || teamNames10.includes(l.owner))
                   .map((l: any) => l.owner)
               )].sort()
               return (
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10, flexWrap:"wrap" as const }}>
-              <span style={{ fontSize:11, fontWeight:600, color:MUTED, letterSpacing:".06em", textTransform:"uppercase" as const }}>Brand:</span>
-              {[{ id: null, label: "All" }, ...Object.entries(BRAND_LABELS).map(([id, label]) => ({ id, label }))].map(b => (
-                <button key={String(b.id)} onClick={() => { setBrandId(b.id); setFilterOwner("all") }} style={{ fontSize:11, padding:"4px 10px", borderRadius:6, border:"1px solid "+BORDER, background: brandId === b.id ? INK : "#fff", color: brandId === b.id ? "#fff" : INK, cursor:"pointer", fontFamily:"inherit", fontWeight:600 }}>{b.label}</button>
-              ))}
-              <span style={{ fontSize:11, fontWeight:600, color:MUTED, letterSpacing:".06em", textTransform:"uppercase" as const, marginLeft:8 }}>Salesperson:</span>
+              <span style={{ fontSize:11, fontWeight:600, color:MUTED, letterSpacing:".06em", textTransform:"uppercase" as const }}>Salesperson:</span>
               <select value={filterOwner} onChange={e => setFilterOwner(e.target.value)} style={{ fontSize:11, padding:"4px 10px", borderRadius:6, border:"1px solid "+BORDER, background:"#fff", color:INK, fontFamily:"inherit", cursor:"pointer" }}>
                 <option value="all">All</option>
                 {visibleStuckOwners.map((o: any) => <option key={o} value={o}>{o}</option>)}
@@ -569,9 +598,11 @@ export default function PipelinePage() {
               )
             })()}
             {(() => {
-              const teamIds10: string[] = brandId && data.teamOwnerIds?.[brandId] ? data.teamOwnerIds[brandId] : []
+              const teamIds10: string[] = data.teamOwnerIds?.[brandId] ?? []
+              const teamNames10: string[] = data.teamOwnerNames?.[brandId] ?? []
+              const hasTeam10 = teamIds10.length > 0 || teamNames10.length > 0
               const filteredStuck = (data.stuckLeads || []).filter((l: any) => {
-                if (brandId && teamIds10.length > 0 && !teamIds10.includes(l.ownerId)) return false
+                if (hasTeam10 && !teamIds10.includes(l.ownerId) && !teamNames10.includes(l.owner)) return false
                 if (filterOwner !== "all" && l.owner !== filterOwner) return false
                 return true
               })
