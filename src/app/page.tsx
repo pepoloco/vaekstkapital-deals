@@ -1,6 +1,6 @@
 "use client"
 import { useEffect } from "react"
-import { useSession } from "next-auth/react"
+import { useSession, signOut } from "next-auth/react"
 import { useRouter } from "next/navigation"
 
 const BG = "#F5F2EC", NAV = "#1a1a2e", INK = "#1a1a2e", MUTED = "#6b7280", BORDER = "#e5e0d8"
@@ -67,8 +67,16 @@ export default function HubPage() {
 
   return (
     <div style={{ minHeight: "100vh", background: BG, fontFamily: "inherit" }}>
-      <nav style={{ background: NAV, height: 54, display: "flex", alignItems: "center", padding: "0 28px", position: "sticky", top: 0, zIndex: 50 }}>
+      <nav style={{ background: NAV, height: 54, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 28px", position: "sticky", top: 0, zIndex: 50 }}>
         <img src="/vaekstkapital-logo.webp" height={22} style={{ filter: "brightness(0) invert(1)", opacity: 0.9 }} alt="Vaekstkapital" />
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {session?.user?.email && (
+            <span style={{ fontSize: 11, color: "rgba(255,255,255,.55)" }}>{session.user.email}</span>
+          )}
+          <button onClick={() => signOut({ callbackUrl: "/login" })} style={{ background: "transparent", border: "1px solid rgba(255,255,255,.25)", color: "rgba(255,255,255,.75)", borderRadius: 6, padding: "5px 12px", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
+            Sign Out
+          </button>
+        </div>
       </nav>
 
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "52px 24px 80px" }}>
