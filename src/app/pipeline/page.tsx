@@ -531,50 +531,6 @@ export default function PipelinePage() {
               </div>
             </div>
 
-            {/* §9 Stage × Status cross-table */}
-            <Lbl>Lifecycle Stage × Lead Status Cross-table</Lbl>
-            {(!data.stageStatusMatrix || data.stageStatusMatrix.length === 0) ? (
-              <div style={{ ...s.cc, color:MUTED, fontSize:12, padding:24 }}>No matrix data — run ↻ Sync to populate.</div>
-            ) : (
-            <div style={s.tcard}>
-              <div style={s.tcardH}>
-                <span style={s.tcardT}>Lifecycle Stage × Lead Status Matrix</span>
-                <span style={s.tcardS}>Helps identify misalignments between stage and outreach status</span>
-              </div>
-              <div style={{ overflowX:"auto" }}>
-                <table style={{ width:"100%", borderCollapse:"collapse" }}>
-                  <thead><tr>
-                    <th style={{ ...s.th, minWidth:180 }}>Lifecycle Stage</th>
-                    {(data.leadStatusCols || []).map((col: string) => (
-                      <th key={col} style={{ ...s.th, textAlign:"right" as const, whiteSpace:"nowrap" as const }}>{col}</th>
-                    ))}
-                    <th style={{ ...s.th, textAlign:"right" as const }}>Total</th>
-                  </tr></thead>
-                  <tbody>
-                    {(data.stageStatusMatrix || []).map((row: any) => (
-                      <tr key={row.stage}>
-                        <td style={{ ...s.td, fontWeight:600 }}>{row.stage}</td>
-                        {(data.leadStatusCols || []).map((col: string) => {
-                          const val = row[col] || 0
-                          const unexpected = val > 0 && (
-                            (row.stage === "Customer / Existing Investor" && ["Canvas","Attempting","Connected"].includes(col)) ||
-                            (row.stage === "Lead" && ["Existing Investor","Potential Investor"].includes(col))
-                          )
-                          return (
-                            <td key={col} style={{ ...s.tdr, color: unexpected ? AMBER : val > 0 ? INK : MUTED, fontWeight: val > 0 ? 600 : 400, background: unexpected ? `${AMBER}18` : undefined }}>
-                              {val > 0 ? val : "—"}
-                            </td>
-                          )
-                        })}
-                        <td style={{ ...s.tdr, fontWeight:700, color:BLUE }}>{row["_total"] || 0}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            )}
-
             {/* §10 Stuck Contacts */}
             <Lbl>Stuck Contacts · 30+ days no progress</Lbl>
             {/* Salesperson filter */}
@@ -1014,42 +970,6 @@ export default function PipelinePage() {
               <div style={s.ccSub}>Count of contacts at each Lead Status — separate from Lifecycle Stage funnel</div>
               <div style={{ overflowX:"auto", marginTop:12 }}>
                 <canvas id="ch-lead-status" width={900} height={280} style={{ maxWidth:"100%" }} />
-              </div>
-            </div>
-
-            <Lbl>Stage vs Status Cross-table</Lbl>
-            <div style={s.tcard}>
-              <div style={s.tcardH}>
-                <span style={s.tcardT}>Lifecycle Stage × Lead Status Matrix</span>
-                <span style={s.tcardS}>contacts at each intersection</span>
-              </div>
-              <div style={{ overflowX:"auto" }}>
-                <table style={{ width:"100%", borderCollapse:"collapse" }}>
-                  <thead><tr>
-                    <th style={{ ...s.th, minWidth:160 }}>Lifecycle Stage</th>
-                    {(data.leadStatusCols || []).map((col: string) => (
-                      <th key={col} style={{ ...s.th, textAlign:"right" as const, whiteSpace:"nowrap" as const }}>{col}</th>
-                    ))}
-                    <th style={{ ...s.th, textAlign:"right" as const }}>Total</th>
-                  </tr></thead>
-                  <tbody>
-                    {(data.stageStatusMatrix || []).map((row: any) => (
-                      <tr key={row.stage}>
-                        <td style={{ ...s.td, fontWeight:600 }}>{row.stage}</td>
-                        {(data.leadStatusCols || []).map((col: string) => {
-                          const val = row[col] || 0
-                          const hi = val > 0
-                          return (
-                            <td key={col} style={{ ...s.tdr, color: hi ? INK : MUTED, fontWeight: hi ? 600 : 400 }}>
-                              {val > 0 ? val : "—"}
-                            </td>
-                          )
-                        })}
-                        <td style={{ ...s.tdr, fontWeight:700, color:BLUE }}>{row["_total"] || 0}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
               </div>
             </div>
 

@@ -70,7 +70,7 @@ async function getAllContacts(properties: string[]): Promise<any[]> {
   let after: string | undefined
   const propsParam = properties.join(",")
   do {
-    let path = `/crm/v3/objects/contacts?limit=100&properties=${propsParam}`
+    let path = `/crm/v3/objects/contacts?limit=200&properties=${propsParam}`
     if (after) path += `&after=${after}`
     const data = await hsGet(path)
     results.push(...(data.results || []).map((r: any) => ({ ...r.properties, _id: r.id })))
