@@ -18,7 +18,7 @@ const AXES = { x:{grid:GRID_OPT,ticks:{color:MUTED,font:{size:10}}}, y:{grid:GRI
 
 const fmt = (n: number) => Math.round(n).toLocaleString("da-DK")
 const fmtCcy = (n: number) => new Intl.NumberFormat("da-DK",{style:"currency",currency:"DKK",maximumFractionDigits:0}).format(n)
-const fmtDate = (iso: string | null | undefined) => { if (!iso) return "—"; const d = new Date(iso); return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("en-GB") }
+const fmtDate = (iso: string | null | undefined, time = false) => { if (!iso) return "—"; const d = new Date(iso); if (isNaN(d.getTime())) return "—"; return time ? d.toLocaleString("en-GB", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" }) : d.toLocaleDateString("en-GB") }
 const fmtMo = (m: string) => { const [y,mo]=m.split("-"); return new Date(+y,+mo-1).toLocaleDateString("en-GB",{month:"short",year:"2-digit"}) }
 
 function useChart(id: string, config: () => object, deps: unknown[]) {
@@ -296,7 +296,7 @@ export default function PipelinePage() {
           </a>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-          {data?.fetchedAt && <span style={{ fontSize:11, color:"rgba(255,255,255,.55)" }}>Synced {fmtDate(data.fetchedAt)}</span>}
+          {data?.fetchedAt && <span style={{ fontSize:11, color:"rgba(255,255,255,.55)" }}>Synced {fmtDate(data.fetchedAt, true)}</span>}
           <button onClick={handleSync} disabled={syncing} style={{ background:"rgba(255,255,255,.12)", border:"1px solid rgba(255,255,255,.2)", color:"#fff", borderRadius:6, padding:"5px 12px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
             {syncing ? "Syncing… (1–2 min)" : "↻ Sync"}
           </button>
