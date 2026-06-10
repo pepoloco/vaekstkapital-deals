@@ -56,7 +56,6 @@ const COLUMNS: Column[] = [
   { key: 'platform',        label: 'Platform',          align: 'left'  },
   { key: 'totalSpend',      label: 'Total Spend',       tooltip: 'Total ad spend on this platform',           align: 'right' },
   { key: 'leads',           label: '# Leads',           tooltip: 'Contacts created via this platform',        align: 'right' },
-  { key: 'meetingsBooked',  label: '# Meetings Booked', tooltip: 'Meetings scheduled from platform contacts', align: 'right' },
   { key: 'gradeD',          label: '# Grade D+',        tooltip: 'Contacts scored Grade D or higher',         align: 'right' },
   { key: 'deals',           label: '# Deals',           align: 'right' },
   { key: 'dealValueClosed', label: 'Deal Value Closed', align: 'right' },
@@ -99,7 +98,7 @@ function MarketTable({ data }: { data: MarketOverview }) {
     platform:        'Report Total' as PlatformRow['platform'],
     totalSpend:      data.rows.reduce((s, r) => s + r.totalSpend, 0),
     leads:           data.rows.reduce((s, r) => s + r.leads, 0),
-    meetingsBooked:  data.rows.reduce((s, r) => s + r.meetingsBooked, 0),
+
     gradeD:          data.rows.reduce((s, r) => s + r.gradeD, 0),
     deals:           data.rows.reduce((s, r) => s + r.deals, 0),
     dealValueClosed: data.rows.some(r => r.dealValueClosed !== null)

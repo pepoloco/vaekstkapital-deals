@@ -7,7 +7,6 @@ export interface PlatformRow {
   platform: 'Google' | 'LinkedIn' | 'Meta'
   totalSpend: number
   leads: number
-  meetingsBooked: number
   gradeD: number         // "# Grade D+" — MQL from HubSpot
   deals: number
   dealValueClosed: number | null
@@ -27,9 +26,9 @@ export const PLATFORM_DATA: MarketOverview[] = [
     currency: 'DKK',
     rows: [
       // LinkedIn: all campaigns 0 spend in period (DK, SE, FI, NO accounts)
-      { platform: 'LinkedIn', totalSpend:       0.00, leads:  0, meetingsBooked: 0, gradeD:   0, deals: 0, dealValueClosed: null          },
+      { platform: 'LinkedIn', totalSpend:       0.00, leads:  0,gradeD:   0, deals: 0, dealValueClosed: null          },
       // Meta: DK 105 810.10 + SE 65 813.34 + AT 74 629.77 (all converted to DKK)
-      { platform: 'Meta',     totalSpend:  246253.21, leads: 30, meetingsBooked: 0, gradeD: 163, deals: 3, dealValueClosed: 3538460.00    },
+      { platform: 'Meta',     totalSpend:  246253.21, leads: 30,gradeD: 163, deals: 3, dealValueClosed: 3538460.00    },
     ],
   },
   {
@@ -37,8 +36,8 @@ export const PLATFORM_DATA: MarketOverview[] = [
     market: 'DK',
     currency: 'DKK',
     rows: [
-      { platform: 'LinkedIn', totalSpend:       0.00, leads:  0, meetingsBooked: 0, gradeD:  0, deals: 0, dealValueClosed: null           },
-      { platform: 'Meta',     totalSpend:  105810.10, leads:  7, meetingsBooked: 0, gradeD: 37, deals: 2, dealValueClosed: 2000000.00     },
+      { platform: 'LinkedIn', totalSpend:       0.00, leads:  0,gradeD:  0, deals: 0, dealValueClosed: null           },
+      { platform: 'Meta',     totalSpend:  105810.10, leads:  7,gradeD: 37, deals: 2, dealValueClosed: 2000000.00     },
     ],
   },
   {
@@ -46,8 +45,8 @@ export const PLATFORM_DATA: MarketOverview[] = [
     market: 'SE',
     currency: 'SEK',
     rows: [
-      { platform: 'LinkedIn', totalSpend:       0.00, leads:  0, meetingsBooked: 0, gradeD:   0, deals: 0, dealValueClosed: null          },
-      { platform: 'Meta',     totalSpend:   98670.67, leads: 21, meetingsBooked: 0, gradeD: 100, deals: 1, dealValueClosed: 2307000.00    },
+      { platform: 'LinkedIn', totalSpend:       0.00, leads:  0,gradeD:   0, deals: 0, dealValueClosed: null          },
+      { platform: 'Meta',     totalSpend:   98670.67, leads: 21,gradeD: 100, deals: 1, dealValueClosed: 2307000.00    },
     ],
   },
   {
@@ -56,7 +55,7 @@ export const PLATFORM_DATA: MarketOverview[] = [
     currency: 'EUR',
     rows: [
       // No AT LinkedIn account in HubSpot Ads Manager
-      { platform: 'Meta',     totalSpend:   10003.99, leads:  2, meetingsBooked: 0, gradeD: 26, deals: 0, dealValueClosed: null           },
+      { platform: 'Meta',     totalSpend:   10003.99, leads:  2,gradeD: 26, deals: 0, dealValueClosed: null           },
     ],
   },
   {
@@ -64,8 +63,8 @@ export const PLATFORM_DATA: MarketOverview[] = [
     market: 'FI',
     currency: 'EUR',
     rows: [
-      { platform: 'LinkedIn', totalSpend:       0.00, leads:  0, meetingsBooked: 0, gradeD:  0, deals: 0, dealValueClosed: null           },
-      { platform: 'Meta',     totalSpend:       0.00, leads:  0, meetingsBooked: 0, gradeD:  0, deals: 0, dealValueClosed: null           },
+      { platform: 'LinkedIn', totalSpend:       0.00, leads:  0,gradeD:  0, deals: 0, dealValueClosed: null           },
+      { platform: 'Meta',     totalSpend:       0.00, leads:  0,gradeD:  0, deals: 0, dealValueClosed: null           },
     ],
   },
   {
@@ -73,8 +72,8 @@ export const PLATFORM_DATA: MarketOverview[] = [
     market: 'NO',
     currency: 'NOK',
     rows: [
-      { platform: 'LinkedIn', totalSpend:       0.00, leads:  0, meetingsBooked: 0, gradeD:  0, deals: 0, dealValueClosed: null           },
-      { platform: 'Meta',     totalSpend:       0.00, leads:  0, meetingsBooked: 0, gradeD:  0, deals: 0, dealValueClosed: null           },
+      { platform: 'LinkedIn', totalSpend:       0.00, leads:  0,gradeD:  0, deals: 0, dealValueClosed: null           },
+      { platform: 'Meta',     totalSpend:       0.00, leads:  0,gradeD:  0, deals: 0, dealValueClosed: null           },
     ],
   },
 ]
