@@ -1,9 +1,14 @@
+// Platform attribution data — HubSpot Ads Campaign Manager export
+// Date range: 1 Apr 2026 – 9 Jun 2026  |  Attribution: Last ad interaction
+// meetingsBooked: not tracked in Ads Campaign Manager
+// SE dealValueClosed: converted from DKK using rate derived from campaign spend (≈1.4993 SEK/DKK)
+
 export interface PlatformRow {
   platform: 'Google' | 'LinkedIn' | 'Meta'
   totalSpend: number
   leads: number
   meetingsBooked: number
-  gradeD: number
+  gradeD: number         // "# Grade D+" — MQL from HubSpot
   deals: number
   dealValueClosed: number | null
 }
@@ -21,9 +26,10 @@ export const PLATFORM_DATA: MarketOverview[] = [
     market: 'All Markets',
     currency: 'DKK',
     rows: [
-      { platform: 'Google',   totalSpend:    1972.51, leads:    0, meetingsBooked:   0, gradeD:   0, deals: 0, dealValueClosed: null          },
-      { platform: 'LinkedIn', totalSpend:  196691.31, leads:   89, meetingsBooked:  11, gradeD:  19, deals: 0, dealValueClosed: null          },
-      { platform: 'Meta',     totalSpend:  964619.86, leads: 4684, meetingsBooked: 460, gradeD: 789, deals: 2, dealValueClosed: 60352981.52  },
+      // LinkedIn: all campaigns 0 spend in period (DK, SE, FI, NO accounts)
+      { platform: 'LinkedIn', totalSpend:       0.00, leads:  0, meetingsBooked: 0, gradeD:   0, deals: 0, dealValueClosed: null          },
+      // Meta: DK 105 810.10 + SE 65 813.34 + AT 74 629.77 (all converted to DKK)
+      { platform: 'Meta',     totalSpend:  246253.21, leads: 30, meetingsBooked: 0, gradeD: 163, deals: 3, dealValueClosed: 3538460.00    },
     ],
   },
   {
@@ -31,8 +37,8 @@ export const PLATFORM_DATA: MarketOverview[] = [
     market: 'DK',
     currency: 'DKK',
     rows: [
-      { platform: 'LinkedIn', totalSpend:  132150.25, leads:   62, meetingsBooked:   3, gradeD:  15, deals: 0, dealValueClosed: null          },
-      { platform: 'Meta',     totalSpend:  395443.03, leads: 1582, meetingsBooked:  77, gradeD: 296, deals: 2, dealValueClosed: 16640238.20  },
+      { platform: 'LinkedIn', totalSpend:       0.00, leads:  0, meetingsBooked: 0, gradeD:  0, deals: 0, dealValueClosed: null           },
+      { platform: 'Meta',     totalSpend:  105810.10, leads:  7, meetingsBooked: 0, gradeD: 37, deals: 2, dealValueClosed: 2000000.00     },
     ],
   },
   {
@@ -40,8 +46,8 @@ export const PLATFORM_DATA: MarketOverview[] = [
     market: 'SE',
     currency: 'SEK',
     rows: [
-      { platform: 'LinkedIn', totalSpend:  195840.00, leads:   52, meetingsBooked:   7, gradeD:  18, deals: 0, dealValueClosed: null          },
-      { platform: 'Meta',     totalSpend:  894280.00, leads: 2148, meetingsBooked: 184, gradeD: 384, deals: 3, dealValueClosed: 52400000.00  },
+      { platform: 'LinkedIn', totalSpend:       0.00, leads:  0, meetingsBooked: 0, gradeD:   0, deals: 0, dealValueClosed: null          },
+      { platform: 'Meta',     totalSpend:   98670.67, leads: 21, meetingsBooked: 0, gradeD: 100, deals: 1, dealValueClosed: 2307000.00    },
     ],
   },
   {
@@ -49,8 +55,8 @@ export const PLATFORM_DATA: MarketOverview[] = [
     market: 'AT',
     currency: 'EUR',
     rows: [
-      { platform: 'LinkedIn', totalSpend:   48720.00, leads:   31, meetingsBooked:   4, gradeD:   9, deals: 0, dealValueClosed: null          },
-      { platform: 'Meta',     totalSpend:  218340.50, leads:  856, meetingsBooked:  68, gradeD: 142, deals: 1, dealValueClosed:  9840000.00  },
+      // No AT LinkedIn account in HubSpot Ads Manager
+      { platform: 'Meta',     totalSpend:   10003.99, leads:  2, meetingsBooked: 0, gradeD: 26, deals: 0, dealValueClosed: null           },
     ],
   },
   {
@@ -58,8 +64,8 @@ export const PLATFORM_DATA: MarketOverview[] = [
     market: 'FI',
     currency: 'EUR',
     rows: [
-      { platform: 'LinkedIn', totalSpend:   32450.00, leads:   18, meetingsBooked:   2, gradeD:   5, deals: 0, dealValueClosed: null          },
-      { platform: 'Meta',     totalSpend:  142680.00, leads:  524, meetingsBooked:  42, gradeD:  86, deals: 0, dealValueClosed: null          },
+      { platform: 'LinkedIn', totalSpend:       0.00, leads:  0, meetingsBooked: 0, gradeD:  0, deals: 0, dealValueClosed: null           },
+      { platform: 'Meta',     totalSpend:       0.00, leads:  0, meetingsBooked: 0, gradeD:  0, deals: 0, dealValueClosed: null           },
     ],
   },
   {
@@ -67,8 +73,8 @@ export const PLATFORM_DATA: MarketOverview[] = [
     market: 'NO',
     currency: 'NOK',
     rows: [
-      { platform: 'LinkedIn', totalSpend:  182400.00, leads:   38, meetingsBooked:   5, gradeD:  11, deals: 0, dealValueClosed: null          },
-      { platform: 'Meta',     totalSpend:  812650.00, leads: 1642, meetingsBooked: 124, gradeD: 268, deals: 2, dealValueClosed: 28750000.00  },
+      { platform: 'LinkedIn', totalSpend:       0.00, leads:  0, meetingsBooked: 0, gradeD:  0, deals: 0, dealValueClosed: null           },
+      { platform: 'Meta',     totalSpend:       0.00, leads:  0, meetingsBooked: 0, gradeD:  0, deals: 0, dealValueClosed: null           },
     ],
   },
 ]
