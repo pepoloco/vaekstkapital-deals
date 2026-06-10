@@ -21,12 +21,16 @@ let memCache: Record<string, unknown> = {}
 
 async function writeCache(key: string, data: unknown) {
   if (!UPSTASH_URL || !UPSTASH_TOKEN) { memCache[key] = data; return }
-  await fetch(`${UPSTASH_URL}/set/${key}`, {
+  const res = await fetch(`${UPSTASH_URL}/set/${key}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, "Content-Type": "application/json" },
     body: JSON.stringify(JSON.stringify(data)),
     cache: "no-store",
   })
+  if (!res.ok) {
+    const body = await res.text().catch(() => "")
+    throw new Error(`Cache write failed for key "${key}": ${res.status} ${body.slice(0, 200)}`)
+  }
 }
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
