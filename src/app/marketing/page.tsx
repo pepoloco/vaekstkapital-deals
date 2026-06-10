@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import type { MarketOverview, PlatformRow } from '@/data/marketing-platform-data'
-import { PLATFORM_DATA } from '@/data/marketing-platform-data'
+import { PLATFORM_DATA_2025, PLATFORM_DATA_2026 } from '@/data/marketing-platform-data'
 
 const ALLOWED_DOMAINS = new Set(['vkfunddistribution.com', 'vaekstholdings.com'])
 
@@ -208,9 +208,17 @@ function MarketTable({ data }: { data: MarketOverview }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+type Year = '2025' | '2026'
+
+const YEAR_META: Record<Year, { label: string; range: string; data: MarketOverview[] }> = {
+  '2025': { label: '2025', range: '1 Jan 2025 – 31 Dec 2025', data: PLATFORM_DATA_2025 },
+  '2026': { label: '2026', range: '1 Jan 2026 – 10 Jun 2026', data: PLATFORM_DATA_2026 },
+}
+
 export default function MarketingDashboardPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const [year, setYear] = useState<Year>('2026')
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login')
@@ -226,6 +234,8 @@ export default function MarketingDashboardPage() {
   }
 
   if (!canAccess(session?.user?.email)) return null
+
+  const { range, data } = YEAR_META[year]
 
   return (
     <>
@@ -254,8 +264,43 @@ export default function MarketingDashboardPage() {
 
       <div style={{ background: T.bg, minHeight: 'calc(100vh - 54px)' }}>
         <main style={{ maxWidth: 1440, margin: '0 auto', padding: '28px 40px 60px' }}>
-          {PLATFORM_DATA.map(market => (
-            <MarketTable key={market.id} data={market} />
+
+          {/* Year tabs */}
+          <div style={{ marginBottom: 28 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 0, borderBottom: `2px solid ${T.border}` }}>
+              {(['2025', '2026'] as Year[]).map(y => {
+                const active = y === year
+                return (
+                  <button
+                    key={y}
+                    onClick={() => setYear(y)}
+                    style={{
+                      padding: '10px 24px',
+                      fontSize: 13,
+                      fontWeight: active ? 700 : 500,
+                      color: active ? T.teal : T.mid,
+                      background: 'none',
+                      border: 'none',
+                      borderBottom: active ? `2px solid ${T.teal}` : '2px solid transparent',
+                      marginBottom: -2,
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      letterSpacing: '.01em',
+                      transition: 'color .15s',
+                    }}
+                  >
+                    {YEAR_META[y].label}
+                  </button>
+                )
+              })}
+            </div>
+            <p style={{ marginTop: 10, marginBottom: 0, fontSize: 12, color: T.muted }}>
+              {range}
+            </p>
+          </div>
+
+          {data.map(market => (
+            <MarketTable key={`${year}-${market.id}`} data={market} />
           ))}
         </main>
       </div>
