@@ -476,10 +476,15 @@ async function fetchPipelineData() {
   console.log(`[sync] Owners loaded: ${Object.keys(owners).length}`)
   const { teamOwnerIds, teamOwnerNames } = await getTeamOwnerIds(userIdToOwnerId, owners)
 
+  // Fetch live labels from HubSpot so custom stage IDs show the name the team actually sees.
+  // HubSpot labels take priority over hardcoded fallbacks.
+  const hubspotLabels = await getLifecycleStageLabels()
   const knownLabelMap: Record<string, string> = {
     ...Object.fromEntries(LIFECYCLE_STAGES.map(s => [s.id, s.label])),
     ...EXTRA_STAGE_LABELS,
+    ...hubspotLabels,
   }
+  console.log(`[sync] Lifecycle stage labels from HubSpot: ${JSON.stringify(hubspotLabels)}`)
 
   const allContacts = await getAllContacts([
     "email","firstname","lastname","lifecyclestage","hs_lead_status",
