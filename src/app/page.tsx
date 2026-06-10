@@ -15,9 +15,10 @@ const COUNTRIES = [
 ]
 
 const TOOLS = [
-  { label: "Contact Pipeline", sub: "Lifecycle stages, stuck contacts, nurture candidates", href: "/pipeline",     color: "#2d68b0" },
-  { label: "Investor Tour",    sub: "VaekstNet investor onboarding & AUM",                 href: "/investortur",  color: "#15624c" },
-  { label: "Sales Report",     sub: "YTD subscription & fund performance",                 href: "/salgsrapport", color: "#5a4998" },
+  { label: "Contact Pipeline",  sub: "Lifecycle stages, stuck contacts, nurture candidates", href: "/pipeline",     color: "#2d68b0" },
+  { label: "Investor Tour",     sub: "VaekstNet investor onboarding & AUM",                 href: "/investortur",  color: "#15624c" },
+  { label: "Sales Report",      sub: "YTD subscription & fund performance",                 href: "/salgsrapport", color: "#5a4998" },
+  { label: "Marketing Reports", sub: "Platform ad spend, leads & deal attribution by market", href: "/marketing",  color: "#0091ae" },
 ]
 
 // Domain → country key mapping (non-admin users can only click their own country)
@@ -41,9 +42,10 @@ function getAccess(email?: string | null) {
   // AT domain users get Contact Pipeline + Investor Tour
   const canPipelineTour = isAdmin || DK_EXCEPTIONS.has(lc) || SE_EXCEPTIONS.has(lc) || domain === "vaekstkapital.at"
   const canSalesReport  = isAdmin
+  const canMarketing    = isAdmin
   // Which country card this user can click (null = admin can click all)
   const myCountryKey = isAdmin ? null : Object.entries(COUNTRY_DOMAIN).find(([, d]) => d === domain)?.[0] ?? null
-  return { isAdmin, canPipelineTour, canSalesReport, myCountryKey }
+  return { isAdmin, canPipelineTour, canSalesReport, canMarketing, myCountryKey }
 }
 
 const fmtDate = (iso: string | null | undefined) => {
@@ -91,8 +93,8 @@ export default function HubPage() {
     )
   }
 
-  const { isAdmin, canPipelineTour, canSalesReport, myCountryKey } = getAccess(session?.user?.email)
-  const showTools = canPipelineTour || canSalesReport
+  const { isAdmin, canPipelineTour, canSalesReport, canMarketing, myCountryKey } = getAccess(session?.user?.email)
+  const showTools = canPipelineTour || canSalesReport || canMarketing
 
   return (
     <div style={{ minHeight: "100vh", background: BG, fontFamily: "inherit" }}>
@@ -163,6 +165,7 @@ export default function HubPage() {
               {TOOLS.filter(t => {
                 if (t.href === "/pipeline" || t.href === "/investortur") return canPipelineTour
                 if (t.href === "/salgsrapport") return canSalesReport
+                if (t.href === "/marketing") return canMarketing
                 return false
               }).map(t => (
                 <a key={t.href} href={t.href} style={{ textDecoration: "none", borderRadius: 12, border: "1px solid " + BORDER, background: "#fff", padding: "20px 22px", display: "block", boxShadow: "0 1px 3px rgba(0,0,0,.06)", transition: "box-shadow .15s" }}
