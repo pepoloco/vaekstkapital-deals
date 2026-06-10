@@ -1,5 +1,5 @@
 "use client"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useSession, signOut } from "next-auth/react"
 import { useRouter } from "next/navigation"
 
@@ -46,13 +46,42 @@ function getAccess(email?: string | null) {
   return { isAdmin, canPipelineTour, canSalesReport, myCountryKey }
 }
 
+const fmtDate = (iso: string | null | undefined) => {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  return d.toLocaleString("en-GB", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" })
+}
+
 export default function HubPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const [syncing, setSyncing] = useState(false)
+  const [lastSync, setLastSync] = useState<string | null>(null)
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login")
   }, [status, router])
+
+  useEffect(() => {
+    if (status !== "authenticated") return
+    fetch("/api/pipeline-data")
+      .then(r => r.json())
+      .then(d => { if (d.fetchedAt) setLastSync(d.fetchedAt) })
+      .catch(() => {})
+  }, [status])
+
+  async function handleSync() {
+    setSyncing(true)
+    try {
+      await fetch("/api/pipeline-sync")
+      const res = await fetch("/api/pipeline-data")
+      const d = await res.json()
+      if (d.fetchedAt) setLastSync(d.fetchedAt)
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   if (status === "loading") {
     return (
@@ -69,9 +98,17 @@ export default function HubPage() {
     <div style={{ minHeight: "100vh", background: BG, fontFamily: "inherit" }}>
       <nav style={{ background: NAV, height: 54, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 28px", position: "sticky", top: 0, zIndex: 50 }}>
         <img src="/vaekstkapital-logo.webp" height={22} style={{ filter: "brightness(0) invert(1)", opacity: 0.9 }} alt="Vaekstkapital" />
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          {lastSync && (
+            <span style={{ fontSize: 11, color: "rgba(255,255,255,.45)" }}>
+              Last sync: {fmtDate(lastSync)}
+            </span>
+          )}
+          <button onClick={handleSync} disabled={syncing} style={{ background: "rgba(255,255,255,.12)", border: "1px solid rgba(255,255,255,.2)", color: "#fff", borderRadius: 6, padding: "5px 12px", fontSize: 12, cursor: syncing ? "default" : "pointer", fontFamily: "inherit", opacity: syncing ? 0.6 : 1 }}>
+            {syncing ? "Syncing… (1–2 min)" : "↻ Sync"}
+          </button>
           {session?.user?.email && (
-            <span style={{ fontSize: 11, color: "rgba(255,255,255,.55)" }}>{session.user.email}</span>
+            <span style={{ fontSize: 11, color: "rgba(255,255,255,.45)" }}>{session.user.email}</span>
           )}
           <button onClick={() => signOut({ callbackUrl: "/login" })} style={{ background: "transparent", border: "1px solid rgba(255,255,255,.25)", color: "rgba(255,255,255,.75)", borderRadius: 6, padding: "5px 12px", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
             Sign Out

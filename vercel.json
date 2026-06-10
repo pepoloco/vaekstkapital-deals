@@ -2,11 +2,19 @@
   "crons": [
     {
       "path": "/api/cron",
-      "schedule": "0 5 * * *"
+      "schedule": "0 6 * * *"
     },
     {
       "path": "/api/cron",
-      "schedule": "0 17 * * *"
+      "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/pipeline-sync",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/pipeline-sync",
+      "schedule": "0 16 * * *"
     }
   ]
 }

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 
 const BASE = "https://api-eu1.hubspot.com"
@@ -631,9 +631,17 @@ async function fetchPipelineData() {
   }
 }
 
-export async function GET() {
-  const session = await getServerSession()
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+export const maxDuration = 300
+
+export async function GET(req: NextRequest) {
+  // Allow Vercel cron requests (identified by CRON_SECRET) or authenticated sessions
+  const cronSecret = process.env.CRON_SECRET
+  const authHeader = req.headers.get("authorization")
+  const isCron = cronSecret && authHeader === `Bearer ${cronSecret}`
+  if (!isCron) {
+    const session = await getServerSession()
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
   try {
     const data = await fetchPipelineData()
     const { _brandsMetrics, _contactDealDates, _contacts, ...globalData } = data
