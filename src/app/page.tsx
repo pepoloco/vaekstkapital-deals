@@ -1,5 +1,5 @@
 "use client"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useSession, signOut } from "next-auth/react"
 import { useRouter } from "next/navigation"
 
@@ -49,12 +49,28 @@ function getAccess(email?: string | null) {
 }
 
 
+const fmtSync = (iso: string) => {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  return d.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+}
+
 export default function HubPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const [lastSync, setLastSync] = useState<string | null>(null)
+
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login")
   }, [status, router])
+
+  useEffect(() => {
+    if (status !== "authenticated") return
+    fetch("/api/pipeline-data")
+      .then(r => r.json())
+      .then(d => { if (d.fetchedAt) setLastSync(d.fetchedAt) })
+      .catch(() => {})
+  }, [status])
 
   if (status === "loading") {
     return (
@@ -72,6 +88,9 @@ export default function HubPage() {
       <nav style={{ background: NAV, height: 54, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 28px", position: "sticky", top: 0, zIndex: 50 }}>
         <img src="/vaekstkapital-logo.webp" height={22} style={{ filter: "brightness(0) invert(1)", opacity: 0.9 }} alt="Vaekstkapital" />
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          {lastSync && (
+            <span style={{ fontSize: 11, color: "rgba(255,255,255,.35)" }}>Last sync: {fmtSync(lastSync)}</span>
+          )}
           {session?.user?.email && (
             <span style={{ fontSize: 11, color: "rgba(255,255,255,.45)" }}>{session.user.email}</span>
           )}
