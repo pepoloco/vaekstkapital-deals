@@ -76,10 +76,17 @@ export default function HubPage() {
   async function handleSync() {
     setSyncing(true)
     try {
-      await fetch("/api/pipeline-sync")
+      const syncRes = await fetch("/api/pipeline-sync")
+      const syncJson = await syncRes.json().catch(() => ({}))
+      if (!syncRes.ok || syncJson.error) {
+        alert(`Sync failed: ${syncJson.error || syncRes.statusText}`)
+        return
+      }
       const res = await fetch("/api/pipeline-data")
       const d = await res.json()
       if (d.fetchedAt) setLastSync(d.fetchedAt)
+    } catch (err) {
+      alert(`Sync error: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setSyncing(false)
     }
