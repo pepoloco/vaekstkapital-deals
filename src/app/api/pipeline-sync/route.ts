@@ -48,7 +48,10 @@ async function hsGet(path: string, attempt = 0): Promise<any> {
   await sleep(80)
   const res = await fetch(`${BASE}${path}`, { headers: { Authorization: `Bearer ${KEY}` }, cache: "no-store" })
   if (res.status === 429 && attempt < 5) { await sleep(2000 * (attempt + 1)); return hsGet(path, attempt + 1) }
-  if (!res.ok) throw new Error(`GET ${path} → ${res.status}`)
+  if (!res.ok) {
+    const body = await res.text().catch(() => "")
+    throw new Error(`GET ${path} → ${res.status}: ${body.slice(0, 400)}`)
+  }
   return res.json()
 }
 
@@ -486,19 +489,27 @@ async function fetchPipelineData() {
   }
   console.log(`[sync] Lifecycle stage labels from HubSpot: ${JSON.stringify(hubspotLabels)}`)
 
-  const allContacts = await getAllContacts([
+  const CORE_PROPS = [
     "email","firstname","lastname","lifecyclestage","hs_lead_status",
     "createdate","hs_last_sales_activity_timestamp","hubspot_owner_id","endavu_deal_id","phone","company",
-    "hubspotscore","hs_lead_source","global_grade","notes_last_contacted",
-    "lead_engagement_score_total","hs_analytics_source",
+    "hubspotscore","hs_lead_source","notes_last_contacted","hs_analytics_source",
     "hs_all_assigned_business_unit_ids",
     "hs_lifecyclestage_lead_date",
     "hs_lifecyclestage_marketingqualifiedlead_date",
     "hs_lifecyclestage_salesqualifiedlead_date",
     "hs_lifecyclestage_opportunity_date",
     "hs_lifecyclestage_customer_date",
-    "journey_stage",
-  ])
+  ]
+  const OPTIONAL_PROPS = ["global_grade","lead_engagement_score_total","journey_stage"]
+
+  let allContacts: any[]
+  try {
+    allContacts = await getAllContacts([...CORE_PROPS, ...OPTIONAL_PROPS])
+    console.log(`[sync] Contact fetch succeeded with all properties`)
+  } catch (e) {
+    console.warn(`[sync] Contact fetch failed with optional props (${e}), retrying with core props only`)
+    allContacts = await getAllContacts(CORE_PROPS)
+  }
   const contacts = allContacts.filter(c => !isTestContact(c.email || "") && !c.endavu_deal_id)
   console.log(`[sync] Total contacts fetched: ${allContacts.length}, after filter: ${contacts.length}`)
 
