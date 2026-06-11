@@ -315,16 +315,27 @@ function computeContactMetrics(
   for (const c of contacts) {
     const ld  = stageMs(c, "hs_v2_date_entered_lead",                  "hs_lifecyclestage_lead_date")
     const mcd = stageMs(c, "hs_v2_date_entered_marketingqualifiedlead", "hs_lifecyclestage_marketingqualifiedlead_date")
-    const mhd = stageMs(c, "hs_v2_date_entered_770940371")
     const sqd = stageMs(c, "hs_v2_date_entered_salesqualifiedlead",    "hs_lifecyclestage_salesqualifiedlead_date")
     const opd = stageMs(c, "hs_v2_date_entered_opportunity",           "hs_lifecyclestage_opportunity_date")
     const cud = stageMs(c, "hs_v2_date_entered_customer",              "hs_lifecyclestage_customer_date")
     pushDur(transitionDurations["Lead → MQL Cold"],         ld,  mcd)
-    pushDur(transitionDurations["MQL Cold → MQL Hot"],      mcd, mhd)
-    pushDur(transitionDurations["MQL Hot → SQL"],           mhd, sqd)
     pushDur(transitionDurations["SQL → Opportunity"],       sqd, opd)
     pushDur(transitionDurations["Opportunity → Customer"],  opd, cud)
     pushDur(transitionDurations["Lead → Customer (total)"], ld,  cud)
+  }
+  // MQL Hot (stage 770940371) has no hs_v2_date_entered_* property — use lifecycle history.
+  // History entries are sorted ascending, so first hit per stage value = first-entry date.
+  for (const history of Object.values(lifecycleHistory)) {
+    if (!history?.length) continue
+    const firstEntry: Record<string, number> = {}
+    for (const e of history as any[]) {
+      if (e.value && e.ts && !firstEntry[e.value]) firstEntry[e.value] = (e.ts as Date).getTime()
+    }
+    const mc = firstEntry["marketingqualifiedlead"]
+    const mh = firstEntry["770940371"]
+    const sq = firstEntry["salesqualifiedlead"]
+    if (mc && mh) pushDur(transitionDurations["MQL Cold → MQL Hot"], mc, mh)
+    if (mh && sq) pushDur(transitionDurations["MQL Hot → SQL"],      mh, sq)
   }
   const avgDaysPerTransition: Record<string, { avg: number; median: number; count: number }> = {}
   for (const [key, durations] of Object.entries(transitionDurations)) {
@@ -505,9 +516,9 @@ async function fetchPipelineData() {
     "hs_lifecyclestage_opportunity_date",
     "hs_lifecyclestage_customer_date",
     // v2 stage-entered dates (used for transition durations — first entry per stage)
+    // Note: custom stage 770940371 (MQL Hot) has no hs_v2_date_entered_* property — handled via history API below
     "hs_v2_date_entered_lead",
     "hs_v2_date_entered_marketingqualifiedlead",
-    "hs_v2_date_entered_770940371",
     "hs_v2_date_entered_salesqualifiedlead",
     "hs_v2_date_entered_opportunity",
     "hs_v2_date_entered_customer",
