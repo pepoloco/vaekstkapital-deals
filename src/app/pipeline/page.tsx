@@ -327,12 +327,6 @@ export default function PipelinePage() {
         )}
 
         {data && (<>
-          {/* UNDER CONSTRUCTION banner */}
-          <div style={{ background:"rgba(224,108,117,.12)", border:"1px solid "+RED, borderRadius:8, padding:"10px 16px", marginBottom:16, display:"flex", alignItems:"center", gap:10 }}>
-            <span style={{ fontSize:11, fontWeight:800, letterSpacing:".12em", textTransform:"uppercase" as const, color:RED }}>⚠ Under Construction</span>
-            <span style={{ fontSize:11, color:RED, opacity:0.8 }}>Data and metrics are being validated — numbers may not yet be accurate.</span>
-          </div>
-
           {/* Global Brand filter — admins only */}
           {isAdmin && (
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:20, flexWrap:"wrap" as const }}>

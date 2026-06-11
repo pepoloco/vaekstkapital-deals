@@ -136,7 +136,12 @@ export default function HubPage() {
                   onMouseOver={e => (e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,.12)")}
                   onMouseOut={e => (e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,.06)")}>
                   <div style={{ width: 36, height: 4, borderRadius: 2, background: t.color, marginBottom: 14 }} />
-                  <div style={{ fontSize: 15, fontWeight: 700, color: INK, marginBottom: 6 }}>{t.label}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: INK }}>{t.label}</div>
+                    {t.href === "/marketing" && (
+                      <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".1em", textTransform: "uppercase", color: "#b45309", background: "rgba(180,83,9,.1)", border: "1px solid rgba(180,83,9,.25)", borderRadius: 4, padding: "2px 6px" }}>Under Construction</span>
+                    )}
+                  </div>
                   <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.5 }}>{t.sub}</div>
                   <div style={{ marginTop: 16, fontSize: 12, color: t.color, fontWeight: 600 }}>Open →</div>
                 </a>
