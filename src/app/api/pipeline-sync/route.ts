@@ -387,10 +387,10 @@ function computeContactMetrics(
   // Nurture candidates — contacts in Journey Stage "In Nurturing"
   const nurtureCandidates = contacts
     .filter(c => {
-      const js = (c.journey_stage || "").toLowerCase()
+      const js = (c.hs_journey_stage || "").toLowerCase()
       return js === "in nurturing" || js === "nurturing" || js === "in_nurturing"
     })
-    .map(c => ({ id: c._id, name: [c.firstname, c.lastname].filter(Boolean).join(" ") || c.email, email: c.email, stage: stageLabel(c.lifecyclestage) || "—", leadStatus: c.hs_lead_status || "—", journeyStage: c.journey_stage || "—", lastContacted: c.notes_last_contacted || c.hs_last_sales_activity_timestamp || null, owner: owners[c.hubspot_owner_id] || "Unknown" }))
+    .map(c => ({ id: c._id, name: [c.firstname, c.lastname].filter(Boolean).join(" ") || c.email, email: c.email, stage: stageLabel(c.lifecyclestage) || "—", leadStatus: c.hs_lead_status || "—", journeyStage: c.hs_journey_stage || "—", lastContacted: c.notes_last_contacted || c.hs_last_sales_activity_timestamp || null, owner: owners[c.hubspot_owner_id] || "Unknown" }))
     .sort((a, b) => { if (!a.lastContacted) return -1; if (!b.lastContacted) return 1; return new Date(a.lastContacted).getTime() - new Date(b.lastContacted).getTime() })
 
   // Lead Status Distribution (use display labels as keys)
@@ -523,7 +523,7 @@ async function fetchPipelineData() {
     "hs_v2_date_entered_opportunity",
     "hs_v2_date_entered_customer",
   ]
-  const OPTIONAL_PROPS = ["global_grade","lead_engagement_score_total","journey_stage"]
+  const OPTIONAL_PROPS = ["global_grade","lead_engagement_score_total","hs_journey_stage"]
 
   let allContacts: any[]
   try {
@@ -554,6 +554,14 @@ async function fetchPipelineData() {
   console.log(`[sync] Fetching lifecycle history for ${mqlHotIds.length} MQL Hot+ contacts...`)
   const lifecycleHistory = await getLifecycleHistory(mqlHotIds)
   console.log(`[sync] Lifecycle history fetched for ${Object.keys(lifecycleHistory).length} contacts`)
+  {
+    let diagMqlHot = 0, diagMcMh = 0, diagMhSq = 0
+    for (const hist of Object.values(lifecycleHistory)) {
+      const vals = new Set(hist.map((e: any) => e.value))
+      if (vals.has("770940371")) { diagMqlHot++; if (vals.has("marketingqualifiedlead")) diagMcMh++; if (vals.has("salesqualifiedlead")) diagMhSq++ }
+    }
+    console.log(`[sync] DIAG global: contacts_with_mqlhot_in_history=${diagMqlHot} mqlcold_then_hot=${diagMcMh} mqlhot_then_sql=${diagMhSq}`)
+  }
   const now = Date.now()
 
   // Global metrics
@@ -573,6 +581,18 @@ async function fetchPipelineData() {
     const brandHistory: Record<string, any[]> = {}
     for (const [id, hist] of Object.entries(lifecycleHistory)) {
       if (brandContactIds.has(id)) brandHistory[id] = hist
+    }
+    if (brand.id === "0") {
+      let dkMqlHot = 0, dkMcMh = 0, dkMhSq = 0
+      for (const hist of Object.values(brandHistory)) {
+        const vals = new Set(hist.map((e: any) => e.value))
+        if (vals.has("770940371")) { dkMqlHot++; if (vals.has("marketingqualifiedlead")) dkMcMh++; if (vals.has("salesqualifiedlead")) dkMhSq++ }
+      }
+      console.log(`[sync] DIAG dk: brandHistory_size=${Object.keys(brandHistory).length} with_mqlhot=${dkMqlHot} mc+mh=${dkMcMh} mh+sq=${dkMhSq}`)
+      if (dkMqlHot > 0) {
+        const sample = Object.values(brandHistory).find(h => h.some((e: any) => e.value === "770940371"))
+        if (sample) console.log(`[sync] DIAG dk sample history: ${JSON.stringify(sample.slice(0, 5))}`)
+      }
     }
     _brandsMetrics[brand.id] = computeContactMetrics(brandContacts, owners, knownLabelMap, brandHistory, now)
   }
