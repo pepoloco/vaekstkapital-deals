@@ -299,7 +299,8 @@ function computeContactMetrics(
     count: (stageCounts[s.id] || 0) + (s.id === "other" ? unknownCount : 0),
   }))
 
-  // Transition durations (date props + history for MQL Hot)
+  // Transition durations — use hs_v2_date_entered_* (first entry per stage).
+  // Fall back to hs_lifecyclestage_*_date (v1) when the v2 property is absent.
   const transitionDurations: Record<string, number[]> = {
     "Lead → MQL Cold": [], "MQL Cold → MQL Hot": [], "MQL Hot → SQL": [],
     "SQL → Opportunity": [], "Opportunity → Customer": [], "Lead → Customer (total)": [],
@@ -307,24 +308,23 @@ function computeContactMetrics(
   const pushDur = (arr: number[], fromMs: number | null, toMs: number | null) => {
     if (fromMs && toMs && toMs > fromMs) { const d = (toMs - fromMs) / 86400000; if (d > 0 && d < 1825) arr.push(d) }
   }
-  for (const c of contacts) {
-    const ld  = c.hs_lifecyclestage_lead_date                   ? new Date(c.hs_lifecyclestage_lead_date).getTime()                   : null
-    const mcd = c.hs_lifecyclestage_marketingqualifiedlead_date ? new Date(c.hs_lifecyclestage_marketingqualifiedlead_date).getTime() : null
-    const sqd = c.hs_lifecyclestage_salesqualifiedlead_date     ? new Date(c.hs_lifecyclestage_salesqualifiedlead_date).getTime()     : null
-    const opd = c.hs_lifecyclestage_opportunity_date            ? new Date(c.hs_lifecyclestage_opportunity_date).getTime()            : null
-    const cud = c.hs_lifecyclestage_customer_date               ? new Date(c.hs_lifecyclestage_customer_date).getTime()               : null
-    pushDur(transitionDurations["Lead → MQL Cold"],        ld,  mcd)
-    pushDur(transitionDurations["SQL → Opportunity"],      sqd, opd)
-    pushDur(transitionDurations["Opportunity → Customer"], opd, cud)
-    pushDur(transitionDurations["Lead → Customer (total)"],ld,  cud)
+  const stageMs = (c: any, v2prop: string, v1prop?: string): number | null => {
+    const raw = c[v2prop] || (v1prop ? c[v1prop] : null)
+    return raw ? new Date(raw).getTime() : null
   }
-  for (const history of Object.values(lifecycleHistory)) {
-    if (!history?.length) continue
-    const stageTimes: Record<string, Date> = {}
-    for (const e of history as any[]) if (e.value && e.ts && !stageTimes[e.value]) stageTimes[e.value] = e.ts
-    const mc = stageTimes["marketingqualifiedlead"], mh = stageTimes["770940371"], sq = stageTimes["salesqualifiedlead"]
-    if (mc && mh && mh > mc) { const d = (mh.getTime() - mc.getTime()) / 86400000; if (d > 0 && d < 1825) transitionDurations["MQL Cold → MQL Hot"].push(d) }
-    if (mh && sq && sq > mh) { const d = (sq.getTime() - mh.getTime()) / 86400000; if (d > 0 && d < 1825) transitionDurations["MQL Hot → SQL"].push(d) }
+  for (const c of contacts) {
+    const ld  = stageMs(c, "hs_v2_date_entered_lead",                  "hs_lifecyclestage_lead_date")
+    const mcd = stageMs(c, "hs_v2_date_entered_marketingqualifiedlead", "hs_lifecyclestage_marketingqualifiedlead_date")
+    const mhd = stageMs(c, "hs_v2_date_entered_770940371")
+    const sqd = stageMs(c, "hs_v2_date_entered_salesqualifiedlead",    "hs_lifecyclestage_salesqualifiedlead_date")
+    const opd = stageMs(c, "hs_v2_date_entered_opportunity",           "hs_lifecyclestage_opportunity_date")
+    const cud = stageMs(c, "hs_v2_date_entered_customer",              "hs_lifecyclestage_customer_date")
+    pushDur(transitionDurations["Lead → MQL Cold"],         ld,  mcd)
+    pushDur(transitionDurations["MQL Cold → MQL Hot"],      mcd, mhd)
+    pushDur(transitionDurations["MQL Hot → SQL"],           mhd, sqd)
+    pushDur(transitionDurations["SQL → Opportunity"],       sqd, opd)
+    pushDur(transitionDurations["Opportunity → Customer"],  opd, cud)
+    pushDur(transitionDurations["Lead → Customer (total)"], ld,  cud)
   }
   const avgDaysPerTransition: Record<string, { avg: number; median: number; count: number }> = {}
   for (const [key, durations] of Object.entries(transitionDurations)) {
@@ -498,11 +498,19 @@ async function fetchPipelineData() {
     "createdate","hs_last_sales_activity_timestamp","hubspot_owner_id","endavu_deal_id","phone","company",
     "hubspotscore","hs_lead_source","notes_last_contacted","hs_analytics_source",
     "hs_all_assigned_business_unit_ids",
+    // v1 stage-entry dates (used for "time in current stage" — most-recent entry)
     "hs_lifecyclestage_lead_date",
     "hs_lifecyclestage_marketingqualifiedlead_date",
     "hs_lifecyclestage_salesqualifiedlead_date",
     "hs_lifecyclestage_opportunity_date",
     "hs_lifecyclestage_customer_date",
+    // v2 stage-entered dates (used for transition durations — first entry per stage)
+    "hs_v2_date_entered_lead",
+    "hs_v2_date_entered_marketingqualifiedlead",
+    "hs_v2_date_entered_770940371",
+    "hs_v2_date_entered_salesqualifiedlead",
+    "hs_v2_date_entered_opportunity",
+    "hs_v2_date_entered_customer",
   ]
   const OPTIONAL_PROPS = ["global_grade","lead_engagement_score_total","journey_stage"]
 

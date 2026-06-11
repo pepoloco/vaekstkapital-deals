@@ -403,7 +403,7 @@ export default function PipelinePage() {
             <Lbl>Average Time Between Stages</Lbl>
             <div style={s.cc}>
               <div style={s.ccTitle}>Average time between stages</div>
-              <div style={s.ccSub}>Avg / median days — using HubSpot lifecycle stage date properties</div>
+              <div style={s.ccSub}>Avg / median days — hs_v2_date_entered_* (first stage entry)</div>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:10, marginTop:16 }}>
                 {Object.entries(data.avgDaysPerTransition || {}).map(([key, val]: [string, any]) => (
                   <div key={key} style={{ background:"#f7f5f0", borderRadius:8, padding:"12px 14px", border:"1px solid "+BORDER }}>
