@@ -536,9 +536,20 @@ async function fetchPipelineData() {
   const contacts = allContacts.filter(c => !isTestContact(c.email || "") && !c.endavu_deal_id)
   console.log(`[sync] Total contacts fetched: ${allContacts.length}, after filter: ${contacts.length}`)
 
-  // Fetch lifecycle history once for contacts that passed through MQL Hot
+  // Fetch lifecycle history for all contacts that have progressed past MQL Cold —
+  // including Disqualified and Attempted/Connected so contacts who went through
+  // MQL Hot but didn't convert are still counted in the transition cards.
+  const HISTORY_STAGES = new Set([
+    "770940371",          // MQL Hot
+    "salesqualifiedlead", // SQL
+    "opportunity",
+    "customer",
+    "evangelist",
+    "1874186475",         // Disqualified
+    "773079518",          // Attempted / Connected
+  ])
   const mqlHotIds = contacts
-    .filter(c => ["770940371","salesqualifiedlead","opportunity","customer","evangelist"].includes(c.lifecyclestage))
+    .filter(c => HISTORY_STAGES.has(c.lifecyclestage))
     .map(c => c._id)
   console.log(`[sync] Fetching lifecycle history for ${mqlHotIds.length} MQL Hot+ contacts...`)
   const lifecycleHistory = await getLifecycleHistory(mqlHotIds)

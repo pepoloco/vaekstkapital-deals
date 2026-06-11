@@ -409,7 +409,7 @@ export default function PipelinePage() {
                   <div key={key} style={{ background:"#f7f5f0", borderRadius:8, padding:"12px 14px", border:"1px solid "+BORDER }}>
                     <div style={{ fontSize:10, fontWeight:600, color:MUTED, marginBottom:8, letterSpacing:".06em", textTransform:"uppercase" as const, lineHeight:1.4 }}>{key}</div>
                     {val.count === 0
-                      ? <div style={{ fontSize:12, color:MUTED, fontStyle:"italic" }}>No data yet</div>
+                      ? <div style={{ fontSize:12, color:MUTED, fontStyle:"italic" }}>Not used in this cohort</div>
                       : (<>
                           <div style={{ fontSize:26, fontWeight:700, color:INK, lineHeight:1 }}>{val.avg}</div>
                           <div style={{ fontSize:11, color:MUTED, marginTop:2 }}>avg days</div>
