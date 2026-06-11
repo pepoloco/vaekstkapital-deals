@@ -161,11 +161,21 @@ export default function PipelinePage() {
 
   async function handleSync() {
     setSyncing(true)
-    await fetch("/api/pipeline-sync")
-    const url = brandId ? `/api/pipeline-data?brand=${brandId}` : "/api/pipeline-data"
-    const res = await fetch(url)
-    const d = await res.json()
-    if (!d.error) setData(d)
+    try {
+      const syncRes = await fetch("/api/pipeline-sync")
+      const syncJson = await syncRes.json().catch(() => ({}))
+      if (!syncRes.ok || syncJson.error) {
+        alert(`Sync failed: ${syncJson.error || `HTTP ${syncRes.status}`}`)
+        setSyncing(false)
+        return
+      }
+      const url = brandId ? `/api/pipeline-data?brand=${brandId}` : "/api/pipeline-data"
+      const res = await fetch(url, { cache: "no-store" })
+      const d = await res.json()
+      if (!d.error) setData(d)
+    } catch (e) {
+      alert(`Sync error: ${e instanceof Error ? e.message : String(e)}`)
+    }
     setSyncing(false)
   }
 
@@ -346,8 +356,8 @@ export default function PipelinePage() {
               </div>
               <div style={{ ...s.kpi, borderTop:`3px solid ${BLUE}` }}>
                 <div style={s.kpiLbl}>Customers / Existing Investors</div>
-                <div style={{ ...s.kpiVal, color:BLUE }}>{fmt(data.stageCounts?.customer || 0)}</div>
-                <div style={s.kpiSub}>{Math.round((data.stageCounts?.customer || 0) / (data.totalContacts || 1) * 100)}% of total contacts</div>
+                <div style={{ ...s.kpiVal, color:BLUE }}>{fmt(data.reinvestering?.totalCustomers || data.stageCounts?.customer || 0)}</div>
+                <div style={s.kpiSub}>{Math.round((data.reinvestering?.totalCustomers || data.stageCounts?.customer || 0) / (data.totalContacts || 1) * 100)}% of total contacts</div>
               </div>
               <div style={{ ...s.kpi, borderTop:`3px solid ${RED}` }}>
                 <div style={s.kpiLbl}>Stuck Contacts</div>

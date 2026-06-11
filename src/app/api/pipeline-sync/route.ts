@@ -547,23 +547,21 @@ async function fetchPipelineData() {
     _brandsMetrics[brand.id] = computeContactMetrics(brandContacts, owners, knownLabelMap, brandHistory, now)
   }
 
-  const globalCustomerIds = new Set(contacts.filter(c => c.lifecyclestage === "customer").map(c => c._id))
-  let reinvestering: ReinvesteringResult = emptyReinv(globalCustomerIds.size)
+  const globalLifecycleCustomerIds = new Set(contacts.filter(c => c.lifecyclestage === "customer").map(c => c._id))
+  let reinvestering: ReinvesteringResult = emptyReinv(globalLifecycleCustomerIds.size)
   const contactDealDatesGlobal: Record<string, Date[]> = {}
 
   try {
-    const WON_STAGES = ["closedwon","497565675","503960545","517811422","766320087","4500113624","4643302624"]
+    // Use hs_is_closed_won rather than a hardcoded list of stage IDs — this captures all pipelines (DK, SE, etc.)
     const allWonDeals: any[] = []
-    for (const stageId of WON_STAGES) {
-      let after: string | undefined
-      do {
-        const body: any = { filterGroups: [{ filters: [{ propertyName: "dealstage", operator: "EQ", value: stageId }] }], properties: ["closedate","amount"], limit: 200 }
-        if (after) body.after = after
-        const data = await hsPost("/crm/v3/objects/deals/search", body)
-        allWonDeals.push(...(data.results || [])); after = data.paging?.next?.after
-      } while (after)
+    let wonAfter: string | undefined
+    do {
+      const body: any = { filterGroups: [{ filters: [{ propertyName: "hs_is_closed_won", operator: "EQ", value: "true" }] }], properties: ["closedate","amount"], limit: 100 }
+      if (wonAfter) body.after = wonAfter
+      const data = await hsPost("/crm/v3/objects/deals/search", body)
+      allWonDeals.push(...(data.results || [])); wonAfter = data.paging?.next?.after
       await sleep(300)
-    }
+    } while (wonAfter)
     const dealIds = allWonDeals.map(d => d.id)
     for (let i = 0; i < dealIds.length; i += 100) {
       await sleep(200)
@@ -581,7 +579,9 @@ async function fetchPipelineData() {
         }
       } catch { /* skip */ }
     }
-    reinvestering = calcReinv(contactDealDatesGlobal, globalCustomerIds)
+    // Investors = any contact associated with at least one closed-won deal (not filtered by lifecycle stage)
+    const globalInvestorIds = new Set(Object.keys(contactDealDatesGlobal))
+    reinvestering = calcReinv(contactDealDatesGlobal, globalInvestorIds)
   } catch { /* skip */ }
 
   // ── Deal stats ──
@@ -675,17 +675,20 @@ export async function GET(req: NextRequest) {
     for (const [region, brand] of Object.entries(BRAND_IDS)) {
       const brandMetrics = _brandsMetrics[brand.id]
       if (!brandMetrics) { console.log(`[sync] ⚠ No metrics for brand ${region} (${brand.id}) — writing empty cache`); }
-      // Per-brand reinvestment: filter contactDealDates to customers of this brand
-      const brandCustomerIds = new Set(
+      // Per-brand reinvestment: existing investors = brand contacts with ≥1 closed-won deal (not filtered by lifecycle stage)
+      const brandContactIdSet = new Set(
         (_contacts || [])
-          .filter((c: any) => c.lifecyclestage === "customer" && String(c.hs_all_assigned_business_unit_ids || "").split(";").map((s: string) => s.trim()).includes(brand.id))
+          .filter((c: any) => String(c.hs_all_assigned_business_unit_ids || "").split(";").map((s: string) => s.trim()).includes(brand.id))
           .map((c: any) => c._id)
       )
+      const brandInvestorIds = new Set(
+        Object.keys(_contactDealDates || {}).filter(cid => brandContactIdSet.has(cid))
+      )
       const brandReinvestering = _contactDealDates
-        ? calcReinv(_contactDealDates, brandCustomerIds)
-        : emptyReinv(brandCustomerIds.size)
+        ? calcReinv(_contactDealDates, brandInvestorIds)
+        : emptyReinv(brandInvestorIds.size)
       const brandKey = `vk-pipeline-data-${brand.id}`
-      console.log(`[sync] Writing brand cache key: ${brandKey} (${brandMetrics?.totalContacts ?? 0} contacts, ${brandCustomerIds.size} customers)`)
+      console.log(`[sync] Writing brand cache key: ${brandKey} (${brandMetrics?.totalContacts ?? 0} contacts, ${brandInvestorIds.size} investors with deals)`)
       await writeCache(brandKey, {
         fetchedAt: globalData.fetchedAt,
         dealStats: globalData.dealStats,
