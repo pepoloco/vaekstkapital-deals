@@ -666,9 +666,15 @@ export async function GET(req: NextRequest) {
     const data = await fetchPipelineData()
     const { _brandsMetrics, _contactDealDates, _contacts, ...globalData } = data
 
-    // Write global data (strip internal fields)
-    console.log(`[sync] Writing global cache key: ${CACHE_KEY} (${globalData.totalContacts} contacts)`)
-    await writeCache(CACHE_KEY, globalData)
+    // Write global data — truncate large contact arrays to stay under Upstash 10 MB limit.
+    // The global key is only a fallback; per-brand keys are what the page loads.
+    const globalPayload = {
+      ...globalData,
+      stuckLeads:        (globalData.stuckLeads        || []).slice(0, 200),
+      nurtureCandidates: (globalData.nurtureCandidates || []).slice(0, 200),
+    }
+    console.log(`[sync] Writing global cache key: ${CACHE_KEY} (${globalData.totalContacts} contacts, stuckLeads truncated to 200)`)
+    await writeCache(CACHE_KEY, globalPayload)
     console.log(`[sync] ✓ Global cache written`)
 
     // Write per-brand data (brand-specific contact metrics + per-brand reinvestment)
