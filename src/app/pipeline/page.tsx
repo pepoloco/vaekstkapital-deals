@@ -67,7 +67,7 @@ const TABS: string[] = [] // No tabs — Contact Pipeline shows all sections dir
 const STAGE_LABELS: Record<string, string> = {
   lead:                   "Lead",
   marketingqualifiedlead: "MQL Cold",
-  "770940371":            "MQL Hot",
+  "770940371":            "Marketing Qualified Lead",
   salesqualifiedlead:     "SQL",
   opportunity:            "Opportunity / Potential Investor",
   customer:               "Customer / Existing Investor",
@@ -495,7 +495,7 @@ export default function PipelinePage() {
                     <th style={s.th}>Salesperson</th>
                     <th style={{ ...s.th, textAlign:"right" as const }}>Lead</th>
                     <th style={{ ...s.th, textAlign:"right" as const }}>MQL Cold</th>
-                    <th style={{ ...s.th, textAlign:"right" as const }}>MQL Hot</th>
+                    <th style={{ ...s.th, textAlign:"right" as const }}>Mktg. Lead</th>
                     <th style={{ ...s.th, textAlign:"right" as const }}>SQL</th>
                     <th style={{ ...s.th, textAlign:"right" as const }}>Opportunity</th>
                     <th style={{ ...s.th, textAlign:"right" as const, background:"rgba(21,97,76,.06)" }}>Customer</th>
@@ -848,7 +848,7 @@ export default function PipelinePage() {
                     <th style={s.th}>Salesperson</th>
                     <th style={{ ...s.th, textAlign:"right" as const }}>Lead</th>
                     <th style={{ ...s.th, textAlign:"right" as const }}>MQL Cold</th>
-                    <th style={{ ...s.th, textAlign:"right" as const }}>MQL Hot</th>
+                    <th style={{ ...s.th, textAlign:"right" as const }}>Mktg. Lead</th>
                     <th style={{ ...s.th, textAlign:"right" as const }}>SQL</th>
                     <th style={{ ...s.th, textAlign:"right" as const }}>Opportunity</th>
                     <th style={{ ...s.th, textAlign:"right" as const }}>Customer</th>

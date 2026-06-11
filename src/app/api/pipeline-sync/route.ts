@@ -240,7 +240,7 @@ async function fetchActivitiesByOwner(sinceMs: number): Promise<Record<string, {
 const LIFECYCLE_STAGES = [
   { id: "lead",                   label: "Lead" },
   { id: "marketingqualifiedlead", label: "MQL Cold" },
-  { id: "770940371",              label: "MQL Hot" },
+  { id: "770940371",              label: "Marketing Qualified Lead" },
   { id: "salesqualifiedlead",     label: "SQL" },
   { id: "opportunity",            label: "Opportunity / Potential Investor" },
   { id: "customer",               label: "Customer / Existing Investor" },
@@ -302,7 +302,7 @@ function computeContactMetrics(
   // Transition durations — use hs_v2_date_entered_* (first entry per stage).
   // Fall back to hs_lifecyclestage_*_date (v1) when the v2 property is absent.
   const transitionDurations: Record<string, number[]> = {
-    "Lead → MQL Cold": [], "MQL Cold → MQL Hot": [], "MQL Hot → SQL": [],
+    "Lead → MQL Cold": [], "MQL Cold → Mktg. Lead": [], "Mktg. Lead → SQL": [],
     "SQL → Opportunity": [], "Opportunity → Customer": [], "Lead → Customer (total)": [],
   }
   const pushDur = (arr: number[], fromMs: number | null, toMs: number | null) => {
@@ -334,8 +334,8 @@ function computeContactMetrics(
     const mc = firstEntry["marketingqualifiedlead"]
     const mh = firstEntry["770940371"]
     const sq = firstEntry["salesqualifiedlead"]
-    if (mc && mh) pushDur(transitionDurations["MQL Cold → MQL Hot"], mc, mh)
-    if (mh && sq) pushDur(transitionDurations["MQL Hot → SQL"],      mh, sq)
+    if (mc && mh) pushDur(transitionDurations["MQL Cold → Mktg. Lead"], mc, mh)
+    if (mh && sq) pushDur(transitionDurations["Mktg. Lead → SQL"],      mh, sq)
   }
   const avgDaysPerTransition: Record<string, { avg: number; median: number; count: number }> = {}
   for (const [key, durations] of Object.entries(transitionDurations)) {
@@ -536,17 +536,13 @@ async function fetchPipelineData() {
   const contacts = allContacts.filter(c => !isTestContact(c.email || "") && !c.endavu_deal_id)
   console.log(`[sync] Total contacts fetched: ${allContacts.length}, after filter: ${contacts.length}`)
 
-  // Fetch lifecycle history for all contacts that have progressed past MQL Cold —
-  // including Disqualified and Attempted/Connected so contacts who went through
-  // MQL Hot but didn't convert are still counted in the transition cards.
+  // Fetch lifecycle history only for contacts at the two stages that need it:
+  // 770940371 (Marketing Qualified Lead) has no hs_v2_date_entered_* property,
+  // so we use history to find first-entry timestamps. SQL contacts are included
+  // to capture the Mktg. Lead → SQL transition for contacts who have already moved on.
   const HISTORY_STAGES = new Set([
-    "770940371",          // MQL Hot
-    "salesqualifiedlead", // SQL
-    "opportunity",
-    "customer",
-    "evangelist",
-    "1874186475",         // Disqualified
-    "773079518",          // Attempted / Connected
+    "770940371",          // Marketing Qualified Lead (custom stage — no v2 date property)
+    "salesqualifiedlead", // SQL — may have passed through 770940371 first
   ])
   const mqlHotIds = contacts
     .filter(c => HISTORY_STAGES.has(c.lifecyclestage))
@@ -554,14 +550,6 @@ async function fetchPipelineData() {
   console.log(`[sync] Fetching lifecycle history for ${mqlHotIds.length} MQL Hot+ contacts...`)
   const lifecycleHistory = await getLifecycleHistory(mqlHotIds)
   console.log(`[sync] Lifecycle history fetched for ${Object.keys(lifecycleHistory).length} contacts`)
-  {
-    let diagMqlHot = 0, diagMcMh = 0, diagMhSq = 0
-    for (const hist of Object.values(lifecycleHistory)) {
-      const vals = new Set(hist.map((e: any) => e.value))
-      if (vals.has("770940371")) { diagMqlHot++; if (vals.has("marketingqualifiedlead")) diagMcMh++; if (vals.has("salesqualifiedlead")) diagMhSq++ }
-    }
-    console.log(`[sync] DIAG global: contacts_with_mqlhot_in_history=${diagMqlHot} mqlcold_then_hot=${diagMcMh} mqlhot_then_sql=${diagMhSq}`)
-  }
   const now = Date.now()
 
   // Global metrics
@@ -581,18 +569,6 @@ async function fetchPipelineData() {
     const brandHistory: Record<string, any[]> = {}
     for (const [id, hist] of Object.entries(lifecycleHistory)) {
       if (brandContactIds.has(id)) brandHistory[id] = hist
-    }
-    if (brand.id === "0") {
-      let dkMqlHot = 0, dkMcMh = 0, dkMhSq = 0
-      for (const hist of Object.values(brandHistory)) {
-        const vals = new Set(hist.map((e: any) => e.value))
-        if (vals.has("770940371")) { dkMqlHot++; if (vals.has("marketingqualifiedlead")) dkMcMh++; if (vals.has("salesqualifiedlead")) dkMhSq++ }
-      }
-      console.log(`[sync] DIAG dk: brandHistory_size=${Object.keys(brandHistory).length} with_mqlhot=${dkMqlHot} mc+mh=${dkMcMh} mh+sq=${dkMhSq}`)
-      if (dkMqlHot > 0) {
-        const sample = Object.values(brandHistory).find(h => h.some((e: any) => e.value === "770940371"))
-        if (sample) console.log(`[sync] DIAG dk sample history: ${JSON.stringify(sample.slice(0, 5))}`)
-      }
     }
     _brandsMetrics[brand.id] = computeContactMetrics(brandContacts, owners, knownLabelMap, brandHistory, now)
   }
