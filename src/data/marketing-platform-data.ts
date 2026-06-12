@@ -138,17 +138,19 @@ export const PLATFORM_DATA_2026: MarketOverview[] = [
   {
     id: 'at',
     market: 'AT',
-    currency: 'EUR',
+    currency: 'DKK',
     // No AT LinkedIn account in HubSpot Ads Manager
-    // Source: AT YTD export Jan 1 – Jun 12, 2026 (confirmed identical to all-time amounts)
+    // Source: AT YTD export Jan 1 – Jun 12, 2026; spend converted EUR→DKK at 7.46 (HubSpot rate)
+    // to match HubSpot's "Cost per Contact" column which reports in account currency (DKK)
     rows: [
-      { platform: 'Meta', totalSpend: 20961.82, leads: 291, gradeD: 110, deals: 0, dealValueClosed: null },
+      { platform: 'Meta', totalSpend: 156375.17, leads: 291, gradeD: 110, deals: 0, dealValueClosed: null },
     ],
     campaigns: [
       // contacts = HubSpot "Total Contacts" column from AT YTD export (Jun 12 2026)
-      { campaignName: 'BU AT - S: Download',         platform: 'Meta', status: 'Paused', totalSpend: 10754.35, contacts: 632, gradeD:  85, deals: 0, dealValueClosed: null },
-      { campaignName: 'General about Vaekstkapital',  platform: 'Meta', status: 'Active', totalSpend:  5406.09, contacts:  73, gradeD:   0, deals: 0, dealValueClosed: null },
-      { campaignName: 'BU AT - S: Direct',            platform: 'Meta', status: 'Paused', totalSpend:  4801.38, contacts:  69, gradeD:  25, deals: 0, dealValueClosed: null },
+      // totalSpend in DKK = EUR × 7.46 (HubSpot's conversion rate)
+      { campaignName: 'BU AT - S: Download',         platform: 'Meta', status: 'Paused', totalSpend:  80227.45, contacts: 632, gradeD:  85, deals: 0, dealValueClosed: null },
+      { campaignName: 'General about Vaekstkapital',  platform: 'Meta', status: 'Active', totalSpend:  40329.43, contacts:  73, gradeD:   0, deals: 0, dealValueClosed: null },
+      { campaignName: 'BU AT - S: Direct',            platform: 'Meta', status: 'Paused', totalSpend:  35818.29, contacts:  69, gradeD:  25, deals: 0, dealValueClosed: null },
     ],
   },
   {
