@@ -223,6 +223,8 @@ const CAM_COLS: { key: string; label: string; tooltip?: string; align: 'left' | 
 function CampaignBreakdownTable({ data }: { data: MarketOverview }) {
   const campaigns = data.campaigns!
   const platforms = [...new Set(campaigns.map(c => c.platform))]
+  const costCur = data.costCurrency ?? data.currency
+  const costRate = data.costConversionRate ?? 1
 
   const thS: React.CSSProperties = {
     padding: '8px 16px',
@@ -248,8 +250,11 @@ function CampaignBreakdownTable({ data }: { data: MarketOverview }) {
 
   function fmt(val: number | null, key: string): string {
     if (key === 'campaignName') return ''
-    if (key === 'totalSpend' || key === 'costPerContact' || key === 'costPerDeal' || key === 'dealValueClosed') {
+    if (key === 'totalSpend' || key === 'dealValueClosed') {
       return val !== null ? fmtCurrency(val, data.currency) : '—'
+    }
+    if (key === 'costPerContact' || key === 'costPerDeal') {
+      return val !== null ? fmtCurrency(val, costCur) : '—'
     }
     return val !== null ? fmtInt(val) : '—'
   }
@@ -305,8 +310,8 @@ function CampaignBreakdownTable({ data }: { data: MarketOverview }) {
               const totValue    = rows.some(r => r.dealValueClosed !== null)
                 ? rows.reduce((s, r) => s + (r.dealValueClosed ?? 0), 0)
                 : null
-              const totCPC = totContacts > 0 ? totSpend / totContacts : null
-              const totCPD = totDeals    > 0 ? totSpend / totDeals    : null
+              const totCPC = totContacts > 0 ? (totSpend * costRate) / totContacts : null
+              const totCPD = totDeals    > 0 ? (totSpend * costRate) / totDeals    : null
 
               const totVals: Record<string, number | null> = {
                 totalSpend: totSpend, contacts: totContacts, gradeD: totGradeD,
@@ -318,8 +323,8 @@ function CampaignBreakdownTable({ data }: { data: MarketOverview }) {
                 <React.Fragment key={platform}>
                   {/* Campaign rows — platform cell spans all rows via rowspan */}
                   {rows.map((row, rowIdx) => {
-                    const cpc = row.contacts > 0 ? row.totalSpend / row.contacts : null
-                    const cpd = row.deals    > 0 ? row.totalSpend / row.deals    : null
+                    const cpc = row.contacts > 0 ? (row.totalSpend * costRate) / row.contacts : null
+                    const cpd = row.deals    > 0 ? (row.totalSpend * costRate) / row.deals    : null
 
                     const vals: Record<string, number | null> = {
                       totalSpend:      row.totalSpend,
