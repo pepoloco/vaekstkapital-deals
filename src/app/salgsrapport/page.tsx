@@ -54,6 +54,23 @@ function getClr(consultant: string, index: number, region: string) {
   return PALETTE[index % PALETTE.length]
 }
 
+// Annual sales targets per region → consultant → year (0 = no target set)
+const TARGETS: Record<string, Record<string, Record<number, number>>> = {
+  dk: {
+    "Ole Krabbe":            { 2024: 0, 2025: 0, 2026: 0 },
+    "Brian Jensen":          { 2024: 0, 2025: 0, 2026: 0 },
+    "Frank Willis Eilersen": { 2024: 0, 2025: 0, 2026: 0 },
+    "Alexander Roijen":      { 2024: 0, 2025: 0, 2026: 0 },
+    "Mikkel Lauridsen":      { 2024: 0, 2025: 0, 2026: 0 },
+    "Mathias Bro Jensen":    { 2024: 0, 2025: 0, 2026: 0 },
+    "Tobias Pedersen":       { 2024: 0, 2025: 0, 2026: 0 },
+    "Jan Erik Dahl Hansen":  { 2024: 0, 2025: 0, 2026: 0 },
+  },
+  se:       {},
+  at:       {},
+  shipping: {},
+}
+
 function fmtCell(n: number): string {
   if (n <= 0) return ""
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M"
@@ -186,6 +203,7 @@ function SalesTable({ report }: { report: ReportData }) {
           })}
         </tbody>
         <tfoot>
+          {/* Total row */}
           <tr style={{ borderTop: bdr2 }}>
             <td style={{
               padding: "10px 16px", fontWeight: 700, fontSize: 10, color: "var(--ink1)",
@@ -203,8 +221,65 @@ function SalesTable({ report }: { report: ReportData }) {
                     color:      total > 0 ? clr.bg : "var(--ink3)",
                     background: total > 0 ? clr.light : "transparent",
                     borderRight: isLast ? bdr2 : bdr,
+                    borderBottom: bdr,
                   }}>
                     {total > 0 ? fmtCell(total) : "—"}
+                  </td>
+                )
+              })
+            )}
+          </tr>
+
+          {/* Target row */}
+          <tr>
+            <td style={{
+              padding: "7px 16px", fontWeight: 600, fontSize: 10, color: "var(--ink3)",
+              letterSpacing: ".06em", textTransform: "uppercase", borderRight: bdr2, borderBottom: bdr,
+            }}>Target</td>
+            {consultants.map((c, ci) =>
+              YEARS.map((y, yi) => {
+                const target = TARGETS[region]?.[c]?.[y] ?? 0
+                const isLast = yi === YEARS.length - 1
+                return (
+                  <td key={`${c}-${y}`} style={{
+                    padding: "7px 10px", textAlign: "right", fontSize: 11,
+                    fontVariantNumeric: "tabular-nums", color: "var(--ink3)",
+                    borderRight: isLast ? bdr2 : bdr, borderBottom: bdr,
+                  }}>
+                    {target > 0 ? fmtCell(target) : <span style={{ color: "var(--bdr)" }}>—</span>}
+                  </td>
+                )
+              })
+            )}
+          </tr>
+
+          {/* % Achieved row */}
+          <tr>
+            <td style={{
+              padding: "7px 16px", fontWeight: 600, fontSize: 10, color: "var(--ink3)",
+              letterSpacing: ".06em", textTransform: "uppercase", borderRight: bdr2,
+            }}>% of Target</td>
+            {consultants.map((c, ci) =>
+              YEARS.map((y, yi) => {
+                const total  = colTotals[c]?.[y] ?? 0
+                const target = TARGETS[region]?.[c]?.[y] ?? 0
+                const isLast = yi === YEARS.length - 1
+                const pct    = target > 0 ? (total / target) * 100 : null
+
+                const pctColor = pct === null ? "var(--ink3)"
+                  : pct >= 100 ? "#059669"
+                  : pct >= 75  ? "#d97706"
+                  : pct >= 50  ? "#ea580c"
+                  : "#dc2626"
+
+                return (
+                  <td key={`${c}-${y}`} style={{
+                    padding: "7px 10px", textAlign: "right", fontSize: 12,
+                    fontWeight: 700, fontVariantNumeric: "tabular-nums",
+                    color: pctColor,
+                    borderRight: isLast ? bdr2 : bdr,
+                  }}>
+                    {pct !== null ? `${pct.toFixed(1)}%` : <span style={{ color: "var(--bdr)" }}>—</span>}
                   </td>
                 )
               })
