@@ -23,8 +23,9 @@ export interface PlatformRow {
 export interface CampaignRow {
   campaignName: string
   platform: 'Google' | 'LinkedIn' | 'Meta'
+  status: 'Active' | 'Paused'
   totalSpend: number
-  contacts: number       // HubSpot "Leads" column = new contacts created
+  contacts: number       // HubSpot "Total Contacts" column (all contacts associated with campaign)
   gradeD: number
   deals: number
   dealValueClosed: number | null
@@ -81,7 +82,8 @@ export const PLATFORM_DATA_2025: MarketOverview[] = [
       { platform: 'Meta', totalSpend: 10599.42, leads: 292, gradeD: 89, deals: 1, dealValueClosed: 134007.00 },
     ],
     campaigns: [
-      { campaignName: 'BU AT - S: Download', platform: 'Meta', totalSpend: 10599.42, contacts: 292, gradeD: 89, deals: 1, dealValueClosed: 134007.00 },
+      // contacts = Total Contacts (all-time 632) − Q2-2026 (17) = 615
+      { campaignName: 'BU AT - S: Download', platform: 'Meta', status: 'Paused', totalSpend: 10599.42, contacts: 615, gradeD: 89, deals: 1, dealValueClosed: 134007.00 },
     ],
   },
   {
@@ -148,9 +150,10 @@ export const PLATFORM_DATA_2026: MarketOverview[] = [
       { platform: 'Meta', totalSpend: 10003.99, leads: 2, gradeD: 26, deals: 0, dealValueClosed: null },
     ],
     campaigns: [
-      { campaignName: 'BU AT - S: Download',          platform: 'Meta', totalSpend:   154.93, contacts: 2, gradeD:  1, deals: 0, dealValueClosed: null },
-      { campaignName: 'General about Vaekstkapital',   platform: 'Meta', totalSpend:  5047.68, contacts: 0, gradeD:  0, deals: 0, dealValueClosed: null },
-      { campaignName: 'BU AT - S: Direct',             platform: 'Meta', totalSpend:  4801.38, contacts: 0, gradeD: 25, deals: 0, dealValueClosed: null },
+      // contacts = HubSpot "Total Contacts" column (not Leads/new-contacts)
+      { campaignName: 'BU AT - S: Download',          platform: 'Meta', status: 'Paused', totalSpend:   154.93, contacts: 17, gradeD:  1, deals: 0, dealValueClosed: null },
+      { campaignName: 'General about Vaekstkapital',   platform: 'Meta', status: 'Active', totalSpend:  5047.68, contacts: 69, gradeD:  0, deals: 0, dealValueClosed: null },
+      { campaignName: 'BU AT - S: Direct',             platform: 'Meta', status: 'Paused', totalSpend:  4801.38, contacts: 69, gradeD: 25, deals: 0, dealValueClosed: null },
     ],
   },
   {

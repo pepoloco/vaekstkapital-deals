@@ -347,7 +347,19 @@ function CampaignBreakdownTable({ data }: { data: MarketOverview }) {
                         {CAM_COLS.map(col => (
                           <td key={col.key} style={tdS(col.align, false, col.key === 'campaignName' ? T.dark : cellColor(vals[col.key] ?? null, col.key))}>
                             {col.key === 'campaignName'
-                              ? row.campaignName
+                              ? (
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  {row.campaignName}
+                                  <span style={{
+                                    fontSize: 10, fontWeight: 600, letterSpacing: '.04em',
+                                    padding: '2px 7px', borderRadius: 10,
+                                    background: row.status === 'Active' ? 'rgba(0,164,91,.12)' : 'rgba(153,172,194,.18)',
+                                    color: row.status === 'Active' ? '#00a45b' : T.muted,
+                                  }}>
+                                    {row.status}
+                                  </span>
+                                </span>
+                              )
                               : fmt(vals[col.key] ?? null, col.key)}
                           </td>
                         ))}
