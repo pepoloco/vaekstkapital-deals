@@ -284,6 +284,7 @@ function SalesTable({ report }: { report: ReportData }) {
                 )
               })
             )}
+          </tr>
         </tfoot>
       </table>
     </div>
