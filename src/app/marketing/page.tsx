@@ -209,6 +209,7 @@ function MarketTable({ data }: { data: MarketOverview }) {
 // ── CampaignBreakdownTable (Austria) ─────────────────────────────────────────
 
 const CAM_COLS: { key: string; label: string; tooltip?: string; align: 'left' | 'right' }[] = [
+  { key: 'platform',        label: 'Platform',          align: 'left'  },
   { key: 'campaignName',    label: 'Campaign',          align: 'left'  },
   { key: 'totalSpend',      label: 'Total Spend',       align: 'right' },
   { key: 'contacts',        label: '# Contacts',        tooltip: 'New contacts created via this campaign', align: 'right' },
@@ -297,36 +298,26 @@ function CampaignBreakdownTable({ data }: { data: MarketOverview }) {
             {platforms.map(platform => {
               const rows: CampaignRow[] = campaigns.filter(c => c.platform === platform)
 
-              const totSpend   = rows.reduce((s, r) => s + r.totalSpend, 0)
+              const totSpend    = rows.reduce((s, r) => s + r.totalSpend, 0)
               const totContacts = rows.reduce((s, r) => s + r.contacts, 0)
-              const totGradeD  = rows.reduce((s, r) => s + r.gradeD, 0)
-              const totDeals   = rows.reduce((s, r) => s + r.deals, 0)
-              const totValue   = rows.some(r => r.dealValueClosed !== null)
+              const totGradeD   = rows.reduce((s, r) => s + r.gradeD, 0)
+              const totDeals    = rows.reduce((s, r) => s + r.deals, 0)
+              const totValue    = rows.some(r => r.dealValueClosed !== null)
                 ? rows.reduce((s, r) => s + (r.dealValueClosed ?? 0), 0)
                 : null
               const totCPC = totContacts > 0 ? totSpend / totContacts : null
               const totCPD = totDeals    > 0 ? totSpend / totDeals    : null
 
+              const totVals: Record<string, number | null> = {
+                totalSpend: totSpend, contacts: totContacts, gradeD: totGradeD,
+                deals: totDeals, costPerContact: totCPC, costPerDeal: totCPD,
+                dealValueClosed: totValue,
+              }
+
               return (
                 <React.Fragment key={platform}>
-                  {/* Platform header */}
-                  <tr style={{ background: 'rgba(0,145,174,.06)' }}>
-                    <td colSpan={CAM_COLS.length} style={{
-                      padding: '7px 16px',
-                      fontSize: 11,
-                      fontWeight: 700,
-                      letterSpacing: '.06em',
-                      textTransform: 'uppercase',
-                      color: T.teal,
-                      borderBottom: `1px solid ${T.borderLight}`,
-                      borderLeft: `3px solid ${T.teal}`,
-                    }}>
-                      {platform}
-                    </td>
-                  </tr>
-
-                  {/* Campaign rows */}
-                  {rows.map(row => {
+                  {/* Campaign rows — platform cell spans all rows via rowspan */}
+                  {rows.map((row, rowIdx) => {
                     const cpc = row.contacts > 0 ? row.totalSpend / row.contacts : null
                     const cpd = row.deals    > 0 ? row.totalSpend / row.deals    : null
 
@@ -344,7 +335,23 @@ function CampaignBreakdownTable({ data }: { data: MarketOverview }) {
                       <tr key={row.campaignName}
                         onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = T.rowHover }}
                         onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}>
-                        {CAM_COLS.map(col => (
+                        {rowIdx === 0 && (
+                          <td rowSpan={rows.length} style={{
+                            padding: '10px 16px',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            letterSpacing: '.06em',
+                            textTransform: 'uppercase',
+                            color: T.teal,
+                            verticalAlign: 'middle',
+                            borderBottom: `1px solid ${T.border}`,
+                            borderLeft: `3px solid ${T.teal}`,
+                            whiteSpace: 'nowrap',
+                          }}>
+                            {platform}
+                          </td>
+                        )}
+                        {CAM_COLS.filter(col => col.key !== 'platform').map(col => (
                           <td key={col.key} style={tdS(col.align, false, col.key === 'campaignName' ? T.dark : cellColor(vals[col.key] ?? null, col.key))}>
                             {col.key === 'campaignName'
                               ? (
@@ -369,20 +376,14 @@ function CampaignBreakdownTable({ data }: { data: MarketOverview }) {
 
                   {/* Platform total */}
                   <tr style={{ background: T.totalBg, borderTop: `2px solid ${T.border}` }}>
-                    {CAM_COLS.map(col => {
-                      const totVals: Record<string, number | null> = {
-                        totalSpend: totSpend, contacts: totContacts, gradeD: totGradeD,
-                        deals: totDeals, costPerContact: totCPC, costPerDeal: totCPD,
-                        dealValueClosed: totValue,
-                      }
-                      return (
-                        <td key={col.key} style={{ ...tdS(col.align, true), borderBottom: 'none' }}>
-                          {col.key === 'campaignName'
-                            ? `${platform} Total`
-                            : fmt(totVals[col.key] ?? null, col.key)}
-                        </td>
-                      )
-                    })}
+                    <td colSpan={2} style={{ ...tdS('left', true), borderBottom: 'none', color: T.dark, borderLeft: `3px solid ${T.teal}` }}>
+                      {platform} Total
+                    </td>
+                    {CAM_COLS.filter(col => col.key !== 'platform' && col.key !== 'campaignName').map(col => (
+                      <td key={col.key} style={{ ...tdS(col.align, true), borderBottom: 'none' }}>
+                        {fmt(totVals[col.key] ?? null, col.key)}
+                      </td>
+                    ))}
                   </tr>
                 </React.Fragment>
               )
