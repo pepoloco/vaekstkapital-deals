@@ -151,9 +151,66 @@ function SalesTable({ report }: { report: ReportData }) {
                   <th key={`${c}-${y}`} style={{
                     padding: "5px 10px", textAlign: "right", fontSize: 9, fontWeight: 700,
                     color: clr.bg, background: clr.light,
-                    borderBottom: bdr2, borderRight: isLast ? bdr2 : bdr, whiteSpace: "nowrap",
+                    borderBottom: bdr, borderRight: isLast ? bdr2 : bdr, whiteSpace: "nowrap",
                   }}>
                     {y === 2026 ? "2026 YTD" : String(y)}
+                  </th>
+                )
+              })
+            )}
+          </tr>
+
+          {/* Target row */}
+          <tr>
+            <th style={{
+              padding: "5px 16px", textAlign: "left", fontSize: 9, fontWeight: 600,
+              letterSpacing: ".06em", textTransform: "uppercase", color: "var(--ink3)",
+              borderBottom: bdr, borderRight: bdr2, whiteSpace: "nowrap", background: "var(--bg)",
+            }}>Target</th>
+            {consultants.map((c, ci) =>
+              YEARS.map((y, yi) => {
+                const target = TARGETS[region]?.[c]?.[y] ?? 0
+                const isLast = yi === YEARS.length - 1
+                return (
+                  <th key={`${c}-${y}`} style={{
+                    padding: "5px 10px", textAlign: "right", fontSize: 9, fontWeight: 600,
+                    color: "var(--ink3)", background: "var(--bg)",
+                    borderBottom: bdr, borderRight: isLast ? bdr2 : bdr, whiteSpace: "nowrap",
+                    fontVariantNumeric: "tabular-nums",
+                  }}>
+                    {target > 0 ? fmtCell(target) : <span style={{ color: "var(--bdr)" }}>—</span>}
+                  </th>
+                )
+              })
+            )}
+          </tr>
+
+          {/* % of Target row */}
+          <tr>
+            <th style={{
+              padding: "5px 16px", textAlign: "left", fontSize: 9, fontWeight: 600,
+              letterSpacing: ".06em", textTransform: "uppercase", color: "var(--ink3)",
+              borderBottom: bdr2, borderRight: bdr2, whiteSpace: "nowrap", background: "var(--bg)",
+            }}>% of Target</th>
+            {consultants.map((c, ci) =>
+              YEARS.map((y, yi) => {
+                const total  = colTotals[c]?.[y] ?? 0
+                const target = TARGETS[region]?.[c]?.[y] ?? 0
+                const isLast = yi === YEARS.length - 1
+                const pct    = target > 0 ? (total / target) * 100 : null
+                const pctColor = pct === null ? "var(--bdr)"
+                  : pct >= 100 ? "#059669"
+                  : pct >= 75  ? "#d97706"
+                  : pct >= 50  ? "#ea580c"
+                  : "#dc2626"
+                return (
+                  <th key={`${c}-${y}`} style={{
+                    padding: "5px 10px", textAlign: "right", fontSize: 10, fontWeight: 700,
+                    color: pctColor, background: "var(--bg)",
+                    borderBottom: bdr2, borderRight: isLast ? bdr2 : bdr, whiteSpace: "nowrap",
+                    fontVariantNumeric: "tabular-nums",
+                  }}>
+                    {pct !== null ? `${pct.toFixed(1)}%` : "—"}
                   </th>
                 )
               })
@@ -204,7 +261,6 @@ function SalesTable({ report }: { report: ReportData }) {
           })}
         </tbody>
         <tfoot>
-          {/* Total row */}
           <tr style={{ borderTop: bdr2 }}>
             <td style={{
               padding: "10px 16px", fontWeight: 700, fontSize: 10, color: "var(--ink1)",
@@ -222,70 +278,12 @@ function SalesTable({ report }: { report: ReportData }) {
                     color:      total > 0 ? clr.bg : "var(--ink3)",
                     background: total > 0 ? clr.light : "transparent",
                     borderRight: isLast ? bdr2 : bdr,
-                    borderBottom: bdr,
                   }}>
                     {total > 0 ? fmtCell(total) : "—"}
                   </td>
                 )
               })
             )}
-          </tr>
-
-          {/* Target row */}
-          <tr>
-            <td style={{
-              padding: "7px 16px", fontWeight: 600, fontSize: 10, color: "var(--ink3)",
-              letterSpacing: ".06em", textTransform: "uppercase", borderRight: bdr2, borderBottom: bdr,
-            }}>Target</td>
-            {consultants.map((c, ci) =>
-              YEARS.map((y, yi) => {
-                const target = TARGETS[region]?.[c]?.[y] ?? 0
-                const isLast = yi === YEARS.length - 1
-                return (
-                  <td key={`${c}-${y}`} style={{
-                    padding: "7px 10px", textAlign: "right", fontSize: 11,
-                    fontVariantNumeric: "tabular-nums", color: "var(--ink3)",
-                    borderRight: isLast ? bdr2 : bdr, borderBottom: bdr,
-                  }}>
-                    {target > 0 ? fmtCell(target) : <span style={{ color: "var(--bdr)" }}>—</span>}
-                  </td>
-                )
-              })
-            )}
-          </tr>
-
-          {/* % Achieved row */}
-          <tr>
-            <td style={{
-              padding: "7px 16px", fontWeight: 600, fontSize: 10, color: "var(--ink3)",
-              letterSpacing: ".06em", textTransform: "uppercase", borderRight: bdr2,
-            }}>% of Target</td>
-            {consultants.map((c, ci) =>
-              YEARS.map((y, yi) => {
-                const total  = colTotals[c]?.[y] ?? 0
-                const target = TARGETS[region]?.[c]?.[y] ?? 0
-                const isLast = yi === YEARS.length - 1
-                const pct    = target > 0 ? (total / target) * 100 : null
-
-                const pctColor = pct === null ? "var(--ink3)"
-                  : pct >= 100 ? "#059669"
-                  : pct >= 75  ? "#d97706"
-                  : pct >= 50  ? "#ea580c"
-                  : "#dc2626"
-
-                return (
-                  <td key={`${c}-${y}`} style={{
-                    padding: "7px 10px", textAlign: "right", fontSize: 12,
-                    fontWeight: 700, fontVariantNumeric: "tabular-nums",
-                    color: pctColor,
-                    borderRight: isLast ? bdr2 : bdr,
-                  }}>
-                    {pct !== null ? `${pct.toFixed(1)}%` : <span style={{ color: "var(--bdr)" }}>—</span>}
-                  </td>
-                )
-              })
-            )}
-          </tr>
         </tfoot>
       </table>
     </div>
