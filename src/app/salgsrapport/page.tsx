@@ -55,16 +55,17 @@ function getClr(consultant: string, index: number, region: string) {
 }
 
 // Annual sales targets per region → consultant → year (0 = no target set)
+// Frank, Alexander, Brian Jensen: 120 M DKK/year — all others: 60 M DKK/year
 const TARGETS: Record<string, Record<string, Record<number, number>>> = {
   dk: {
-    "Ole Krabbe":            { 2024: 0, 2025: 0, 2026: 0 },
-    "Brian Jensen":          { 2024: 0, 2025: 0, 2026: 0 },
-    "Frank Willis Eilersen": { 2024: 0, 2025: 0, 2026: 0 },
-    "Alexander Roijen":      { 2024: 0, 2025: 0, 2026: 0 },
-    "Mikkel Lauridsen":      { 2024: 0, 2025: 0, 2026: 0 },
-    "Mathias Bro Jensen":    { 2024: 0, 2025: 0, 2026: 0 },
-    "Tobias Pedersen":       { 2024: 0, 2025: 0, 2026: 0 },
-    "Jan Erik Dahl Hansen":  { 2024: 0, 2025: 0, 2026: 0 },
+    "Ole Krabbe":            { 2024: 60_000_000, 2025: 60_000_000, 2026: 60_000_000 },
+    "Brian Jensen":          { 2024: 120_000_000, 2025: 120_000_000, 2026: 120_000_000 },
+    "Frank Willis Eilersen": { 2024: 120_000_000, 2025: 120_000_000, 2026: 120_000_000 },
+    "Alexander Roijen":      { 2024: 120_000_000, 2025: 120_000_000, 2026: 120_000_000 },
+    "Mikkel Lauridsen":      { 2024: 60_000_000, 2025: 60_000_000, 2026: 60_000_000 },
+    "Mathias Bro Jensen":    { 2024: 60_000_000, 2025: 60_000_000, 2026: 60_000_000 },
+    "Tobias Pedersen":       { 2024: 60_000_000, 2025: 60_000_000, 2026: 60_000_000 },
+    "Jan Erik Dahl Hansen":  { 2024: 60_000_000, 2025: 60_000_000, 2026: 60_000_000 },
   },
   se:       {},
   at:       {},
