@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import type { MarketOverview, PlatformRow } from '@/data/marketing-platform-data'
+import type { MarketOverview, PlatformRow, CampaignRow } from '@/data/marketing-platform-data'
 import { PLATFORM_DATA_2025, PLATFORM_DATA_2026 } from '@/data/marketing-platform-data'
 
 const ALLOWED_DOMAINS = new Set(['vkfunddistribution.com', 'vaekstholdings.com'])
@@ -206,6 +206,182 @@ function MarketTable({ data }: { data: MarketOverview }) {
   )
 }
 
+// ── CampaignBreakdownTable (Austria) ─────────────────────────────────────────
+
+const CAM_COLS: { key: string; label: string; tooltip?: string; align: 'left' | 'right' }[] = [
+  { key: 'campaignName',    label: 'Campaign',          align: 'left'  },
+  { key: 'totalSpend',      label: 'Total Spend',       align: 'right' },
+  { key: 'contacts',        label: '# Contacts',        tooltip: 'New contacts created via this campaign', align: 'right' },
+  { key: 'gradeD',          label: '# Grade D+',        tooltip: 'Contacts scored Grade D or higher',      align: 'right' },
+  { key: 'deals',           label: '# Deals',           align: 'right' },
+  { key: 'costPerContact',  label: 'Cost / Contact',    align: 'right' },
+  { key: 'costPerDeal',     label: 'Cost / Deal',       align: 'right' },
+  { key: 'dealValueClosed', label: 'Deal Value Closed', align: 'right' },
+]
+
+function CampaignBreakdownTable({ data }: { data: MarketOverview }) {
+  const campaigns = data.campaigns!
+  const platforms = [...new Set(campaigns.map(c => c.platform))]
+
+  const thS: React.CSSProperties = {
+    padding: '8px 16px',
+    fontSize: 11,
+    fontWeight: 600,
+    letterSpacing: '.05em',
+    textTransform: 'uppercase',
+    color: T.mid,
+    whiteSpace: 'nowrap',
+    borderBottom: `1px solid ${T.border}`,
+    background: T.headerBg,
+  }
+
+  const tdS = (align: 'left' | 'right', bold = false, color = T.dark): React.CSSProperties => ({
+    padding: '10px 16px',
+    fontSize: 13,
+    textAlign: align,
+    fontWeight: bold ? 700 : 400,
+    whiteSpace: 'nowrap',
+    color,
+    borderBottom: `1px solid ${T.borderLight}`,
+  })
+
+  function fmt(val: number | null, key: string): string {
+    if (key === 'campaignName') return ''
+    if (key === 'totalSpend' || key === 'costPerContact' || key === 'costPerDeal' || key === 'dealValueClosed') {
+      return val !== null ? fmtCurrency(val, data.currency) : '—'
+    }
+    return val !== null ? fmtInt(val) : '—'
+  }
+
+  function cellColor(val: number | null, key: string): string {
+    if (key === 'campaignName') return T.dark
+    if (val === null || val === 0) return key === 'dealValueClosed' || key === 'costPerContact' || key === 'costPerDeal' ? T.muted : T.dark
+    return T.teal
+  }
+
+  return (
+    <div style={{
+      background: T.white,
+      border: `1px solid ${T.border}`,
+      borderRadius: 6,
+      overflow: 'hidden',
+      marginBottom: 24,
+      boxShadow: '0 1px 4px rgba(45,62,80,.06)',
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '14px 18px', borderBottom: `1px solid ${T.borderLight}`,
+      }}>
+        <span style={{ fontSize: 14, fontWeight: 600, color: T.dark }}>
+          Marketing Overview — {data.market}
+        </span>
+        <span style={{ fontSize: 12, color: T.muted }}>{data.currency}</span>
+      </div>
+
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              {CAM_COLS.map(col => (
+                <th key={col.key} style={{ ...thS, textAlign: col.align }}>
+                  {col.label}
+                  {col.tooltip && (
+                    <span style={{ fontSize: 10, color: T.muted, marginLeft: 3, cursor: 'help' }}
+                      title={col.tooltip}>ⓘ</span>
+                  )}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {platforms.map(platform => {
+              const rows: CampaignRow[] = campaigns.filter(c => c.platform === platform)
+
+              const totSpend   = rows.reduce((s, r) => s + r.totalSpend, 0)
+              const totContacts = rows.reduce((s, r) => s + r.contacts, 0)
+              const totGradeD  = rows.reduce((s, r) => s + r.gradeD, 0)
+              const totDeals   = rows.reduce((s, r) => s + r.deals, 0)
+              const totValue   = rows.some(r => r.dealValueClosed !== null)
+                ? rows.reduce((s, r) => s + (r.dealValueClosed ?? 0), 0)
+                : null
+              const totCPC = totContacts > 0 ? totSpend / totContacts : null
+              const totCPD = totDeals    > 0 ? totSpend / totDeals    : null
+
+              return (
+                <React.Fragment key={platform}>
+                  {/* Platform header */}
+                  <tr style={{ background: 'rgba(0,145,174,.06)' }}>
+                    <td colSpan={CAM_COLS.length} style={{
+                      padding: '7px 16px',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      letterSpacing: '.06em',
+                      textTransform: 'uppercase',
+                      color: T.teal,
+                      borderBottom: `1px solid ${T.borderLight}`,
+                      borderLeft: `3px solid ${T.teal}`,
+                    }}>
+                      {platform}
+                    </td>
+                  </tr>
+
+                  {/* Campaign rows */}
+                  {rows.map(row => {
+                    const cpc = row.contacts > 0 ? row.totalSpend / row.contacts : null
+                    const cpd = row.deals    > 0 ? row.totalSpend / row.deals    : null
+
+                    const vals: Record<string, number | null> = {
+                      totalSpend:      row.totalSpend,
+                      contacts:        row.contacts,
+                      gradeD:          row.gradeD,
+                      deals:           row.deals,
+                      costPerContact:  cpc,
+                      costPerDeal:     cpd,
+                      dealValueClosed: row.dealValueClosed,
+                    }
+
+                    return (
+                      <tr key={row.campaignName}
+                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = T.rowHover }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}>
+                        {CAM_COLS.map(col => (
+                          <td key={col.key} style={tdS(col.align, false, col.key === 'campaignName' ? T.dark : cellColor(vals[col.key] ?? null, col.key))}>
+                            {col.key === 'campaignName'
+                              ? row.campaignName
+                              : fmt(vals[col.key] ?? null, col.key)}
+                          </td>
+                        ))}
+                      </tr>
+                    )
+                  })}
+
+                  {/* Platform total */}
+                  <tr style={{ background: T.totalBg, borderTop: `2px solid ${T.border}` }}>
+                    {CAM_COLS.map(col => {
+                      const totVals: Record<string, number | null> = {
+                        totalSpend: totSpend, contacts: totContacts, gradeD: totGradeD,
+                        deals: totDeals, costPerContact: totCPC, costPerDeal: totCPD,
+                        dealValueClosed: totValue,
+                      }
+                      return (
+                        <td key={col.key} style={{ ...tdS(col.align, true), borderBottom: 'none' }}>
+                          {col.key === 'campaignName'
+                            ? `${platform} Total`
+                            : fmt(totVals[col.key] ?? null, col.key)}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                </React.Fragment>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 type Year = '2025' | '2026'
@@ -299,9 +475,11 @@ export default function MarketingDashboardPage() {
             </p>
           </div>
 
-          {data.map(market => (
-            <MarketTable key={`${year}-${market.id}`} data={market} />
-          ))}
+          {data.map(market =>
+            market.campaigns
+              ? <CampaignBreakdownTable key={`${year}-${market.id}`} data={market} />
+              : <MarketTable           key={`${year}-${market.id}`} data={market} />
+          )}
         </main>
       </div>
     </>

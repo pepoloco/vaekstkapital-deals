@@ -19,11 +19,23 @@ export interface PlatformRow {
   dealValueClosed: number | null
 }
 
+// Campaign-level row — used for markets that show per-campaign breakdown (AT)
+export interface CampaignRow {
+  campaignName: string
+  platform: 'Google' | 'LinkedIn' | 'Meta'
+  totalSpend: number
+  contacts: number       // HubSpot "Leads" column = new contacts created
+  gradeD: number
+  deals: number
+  dealValueClosed: number | null
+}
+
 export interface MarketOverview {
   id: string
   market: string
   currency: 'DKK' | 'EUR' | 'SEK' | 'NOK'
   rows: PlatformRow[]
+  campaigns?: CampaignRow[]  // if present, renders CampaignBreakdownTable instead of MarketTable
 }
 
 // ── 2025 (1 Jan – 31 Dec 2025) ───────────────────────────────────────────────
@@ -62,10 +74,14 @@ export const PLATFORM_DATA_2025: MarketOverview[] = [
     id: 'at',
     market: 'AT',
     currency: 'EUR',
+    // No AT LinkedIn account in HubSpot Ads Manager
+    // Spend ≈ all-time minus Q2-2026 portion ("BU AT - S: Download" active since 2025)
+    // Revenue: 1 000 000 DKK → 134 007 EUR at 7.463 DKK/EUR
     rows: [
-      // No AT LinkedIn account in HubSpot Ads Manager
-      // Spend ≈ all-time minus Q2-2026 portion (campaign active since 2025)
-      { platform: 'Meta',     totalSpend:  10599.42, leads: 292, gradeD:  89, deals: 1, dealValueClosed:  134000.00     },
+      { platform: 'Meta', totalSpend: 10599.42, leads: 292, gradeD: 89, deals: 1, dealValueClosed: 134007.00 },
+    ],
+    campaigns: [
+      { campaignName: 'BU AT - S: Download', platform: 'Meta', totalSpend: 10599.42, contacts: 292, gradeD: 89, deals: 1, dealValueClosed: 134007.00 },
     ],
   },
   {
@@ -126,10 +142,15 @@ export const PLATFORM_DATA_2026: MarketOverview[] = [
     id: 'at',
     market: 'AT',
     currency: 'EUR',
+    // No AT LinkedIn account in HubSpot Ads Manager
+    // All three campaigns ran Apr–Jun 2026 (same amounts in both all-time and Q2 exports)
     rows: [
-      // No AT LinkedIn account in HubSpot Ads Manager
-      // Q2-2026 portion only (Jan–Mar spend attributed to 2025 approximation)
-      { platform: 'Meta',     totalSpend:   10003.99, leads:   2, gradeD:  26, deals: 0, dealValueClosed: null          },
+      { platform: 'Meta', totalSpend: 10003.99, leads: 2, gradeD: 26, deals: 0, dealValueClosed: null },
+    ],
+    campaigns: [
+      { campaignName: 'BU AT - S: Download',          platform: 'Meta', totalSpend:   154.93, contacts: 2, gradeD:  1, deals: 0, dealValueClosed: null },
+      { campaignName: 'General about Vaekstkapital',   platform: 'Meta', totalSpend:  5047.68, contacts: 0, gradeD:  0, deals: 0, dealValueClosed: null },
+      { campaignName: 'BU AT - S: Direct',             platform: 'Meta', totalSpend:  4801.38, contacts: 0, gradeD: 25, deals: 0, dealValueClosed: null },
     ],
   },
   {
