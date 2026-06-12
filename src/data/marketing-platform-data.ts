@@ -1,14 +1,14 @@
 // Platform attribution data — HubSpot Ads Campaign Manager exports
 // Source A: 1 Jan 2025 – 10 Jun 2026 (all-time)  |  Attribution: Last ad interaction
-// Source B: 1 Apr 2026 –  9 Jun 2026 (Q2 reference used to isolate year splits)
+// Source B: 1 Jan 2026 – 12 Jun 2026 (AT-only YTD, downloaded 12 Jun 2026)
 //
 // Year split methodology:
-//   2025 = campaigns whose names/start-dates place them in 2025 (all Paused by end of 2025)
-//   2026 = campaigns whose names/start-dates place them in 2026 (Jan–Jun full-year amounts)
-//   AT "BU AT - S: Download" spans years → 2025 ≈ all-time − Q2-2026; 2026 ≈ Q2-2026 portion
+//   2025 = campaigns confirmed to have run only in 2025 (Paused, 2025 date in name)
+//   2026 = campaigns confirmed from the AT YTD export + all-time comparison
+//   AT: all three campaigns show identical spend in the 2026-YTD export as in all-time →
+//       100 % of AT spend occurred in 2026. AT 2025 = zero.
 //
-// SE dealValueClosed: 2025 stored in SEK (from campaign); 2026 converted from DKK (≈1.4993 SEK/DKK)
-// AT dealValueClosed: 2025 revenue was 1 000 000 DKK → converted to EUR at ≈7.463 DKK/EUR
+// SE dealValueClosed: 2025 stored in SEK; 2026 converted from DKK (≈1.4993 SEK/DKK)
 
 export interface PlatformRow {
   platform: 'Google' | 'LinkedIn' | 'Meta'
@@ -49,8 +49,8 @@ export const PLATFORM_DATA_2025: MarketOverview[] = [
     rows: [
       // LinkedIn: DK + SE active in 2025; spend converted to DKK
       { platform: 'LinkedIn', totalSpend: 191252.26, leads:   44, gradeD:  25, deals:  1, dealValueClosed:   750000.00   },
-      // Meta: DK + SE + AT + FI + NO — spend converted to DKK
-      { platform: 'Meta',     totalSpend: 390538.79, leads: 1050, gradeD: 307, deals: 25, dealValueClosed: 21342126.32   },
+      // Meta: DK + SE + FI + NO (AT ran entirely in 2026 — excluded from 2025)
+      { platform: 'Meta',     totalSpend: 311467.12, leads: 758, gradeD: 218, deals: 24, dealValueClosed: 20342126.32   },
     ],
   },
   {
@@ -76,14 +76,9 @@ export const PLATFORM_DATA_2025: MarketOverview[] = [
     market: 'AT',
     currency: 'EUR',
     // No AT LinkedIn account in HubSpot Ads Manager
-    // Spend ≈ all-time minus Q2-2026 portion ("BU AT - S: Download" active since 2025)
-    // Revenue: 1 000 000 DKK → 134 007 EUR at 7.463 DKK/EUR
+    // AT YTD export (Jan 1 – Jun 12 2026) shows same amounts as all-time → all spend was in 2026
     rows: [
-      { platform: 'Meta', totalSpend: 10599.42, leads: 292, gradeD: 89, deals: 1, dealValueClosed: 134007.00 },
-    ],
-    campaigns: [
-      // contacts = Total Contacts (all-time 632) − Q2-2026 (17) = 615
-      { campaignName: 'BU AT - S: Download', platform: 'Meta', status: 'Paused', totalSpend: 10599.42, contacts: 615, gradeD: 89, deals: 1, dealValueClosed: 134007.00 },
+      { platform: 'Meta', totalSpend: 0, leads: 0, gradeD: 0, deals: 0, dealValueClosed: null },
     ],
   },
   {
@@ -116,8 +111,8 @@ export const PLATFORM_DATA_2026: MarketOverview[] = [
     rows: [
       // LinkedIn: zero spend across all markets in 2026
       { platform: 'LinkedIn', totalSpend:       0.00, leads:   0, gradeD:   0, deals: 0, dealValueClosed: null          },
-      // Meta: DK + SE + AT — spend converted to DKK
-      { platform: 'Meta',     totalSpend:  338796.79, leads: 190, gradeD: 249, deals: 9, dealValueClosed: 9401340.00    },
+      // Meta: DK + SE + AT — spend converted to DKK; AT full YTD (156 375 DKK)
+      { platform: 'Meta',     totalSpend:  420542.20, leads: 479, gradeD: 333, deals: 9, dealValueClosed: 9401340.00    },
     ],
   },
   {
@@ -145,15 +140,15 @@ export const PLATFORM_DATA_2026: MarketOverview[] = [
     market: 'AT',
     currency: 'EUR',
     // No AT LinkedIn account in HubSpot Ads Manager
-    // All three campaigns ran Apr–Jun 2026 (same amounts in both all-time and Q2 exports)
+    // Source: AT YTD export Jan 1 – Jun 12, 2026 (confirmed identical to all-time amounts)
     rows: [
-      { platform: 'Meta', totalSpend: 10003.99, leads: 2, gradeD: 26, deals: 0, dealValueClosed: null },
+      { platform: 'Meta', totalSpend: 20961.82, leads: 291, gradeD: 110, deals: 0, dealValueClosed: null },
     ],
     campaigns: [
-      // contacts = HubSpot "Total Contacts" column (not Leads/new-contacts)
-      { campaignName: 'BU AT - S: Download',          platform: 'Meta', status: 'Paused', totalSpend:   154.93, contacts: 17, gradeD:  1, deals: 0, dealValueClosed: null },
-      { campaignName: 'General about Vaekstkapital',   platform: 'Meta', status: 'Active', totalSpend:  5047.68, contacts: 69, gradeD:  0, deals: 0, dealValueClosed: null },
-      { campaignName: 'BU AT - S: Direct',             platform: 'Meta', status: 'Paused', totalSpend:  4801.38, contacts: 69, gradeD: 25, deals: 0, dealValueClosed: null },
+      // contacts = HubSpot "Total Contacts" column from AT YTD export (Jun 12 2026)
+      { campaignName: 'BU AT - S: Download',         platform: 'Meta', status: 'Paused', totalSpend: 10754.35, contacts: 632, gradeD:  85, deals: 0, dealValueClosed: null },
+      { campaignName: 'General about Vaekstkapital',  platform: 'Meta', status: 'Active', totalSpend:  5406.09, contacts:  73, gradeD:   0, deals: 0, dealValueClosed: null },
+      { campaignName: 'BU AT - S: Direct',            platform: 'Meta', status: 'Paused', totalSpend:  4801.38, contacts:  69, gradeD:  25, deals: 0, dealValueClosed: null },
     ],
   },
   {
