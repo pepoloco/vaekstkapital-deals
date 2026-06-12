@@ -213,9 +213,9 @@ const CAM_COLS: { key: string; label: string; tooltip?: string; align: 'left' | 
   { key: 'campaignName',    label: 'Campaign',          align: 'left'  },
   { key: 'totalSpend',      label: 'Total Spend',       align: 'right' },
   { key: 'contacts',        label: '# Contacts',        tooltip: 'New contacts created via this campaign', align: 'right' },
+  { key: 'costPerContact',  label: 'Cost / Contact',    align: 'right' },
   { key: 'gradeD',          label: '# Grade D+',        tooltip: 'Contacts scored Grade D or higher',      align: 'right' },
   { key: 'deals',           label: '# Deals',           align: 'right' },
-  { key: 'costPerContact',  label: 'Cost / Contact',    align: 'right' },
   { key: 'costPerDeal',     label: 'Cost / Deal',       align: 'right' },
   { key: 'dealValueClosed', label: 'Deal Value Closed', align: 'right' },
 ]
