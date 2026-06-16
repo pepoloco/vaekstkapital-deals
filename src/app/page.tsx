@@ -33,6 +33,8 @@ const ADMIN_DOMAINS = new Set(["vkfunddistribution.com", "vaekstholdings.com"])
 const DK_EXCEPTIONS = new Set(["brj@vaekstkapital.dk","tnp@vaekstkapital.dk","sok@vaekstkapital.dk","aro@vaekstkapital.dk","sts@vaekstkapital.dk"])
 // SE exceptions: same
 const SE_EXCEPTIONS = new Set(["spo@vaekstkapital.se","acs@vaekstkapital.se","nry@vaekstkapital.se"])
+// Sales Report exceptions (non-admin users granted access)
+const SALES_REPORT_EXCEPTIONS = new Set(["sok@vaekstkapital.dk"])
 
 function getAccess(email?: string | null) {
   if (!email) return { isAdmin: false, canPipelineTour: false, canSalesReport: false, myCountryKey: null as string | null }
@@ -41,7 +43,7 @@ function getAccess(email?: string | null) {
   const isAdmin = ADMIN_DOMAINS.has(domain)
   // AT domain users get Contact Pipeline + Investor Tour
   const canPipelineTour = isAdmin || DK_EXCEPTIONS.has(lc) || SE_EXCEPTIONS.has(lc) || domain === "vaekstkapital.at"
-  const canSalesReport  = isAdmin
+  const canSalesReport  = isAdmin || SALES_REPORT_EXCEPTIONS.has(lc)
   const canMarketing    = isAdmin
   // Which country card this user can click (null = admin can click all)
   const myCountryKey = isAdmin ? null : Object.entries(COUNTRY_DOMAIN).find(([, d]) => d === domain)?.[0] ?? null

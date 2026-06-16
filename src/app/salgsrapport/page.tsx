@@ -8,6 +8,20 @@ const ADMIN_DOMAINS = ["vaekstholdings.com", "vkfunddistribution.com"]
 const isAdmin = (email?: string | null) =>
   !!email && ADMIN_DOMAINS.includes(email?.split("@")[1]?.toLowerCase() ?? "")
 
+// Non-admin emails granted Sales Report access, mapped to the regions they can see
+const SALES_REPORT_EXCEPTIONS: Record<string, string[]> = {
+  "sok@vaekstkapital.dk": ["dk"],
+}
+
+const canViewSalesReport = (email?: string | null) =>
+  !!email && (isAdmin(email) || email.toLowerCase() in SALES_REPORT_EXCEPTIONS)
+
+const allowedRegions = (email?: string | null): string[] | null => {
+  if (!email) return null
+  if (isAdmin(email)) return null // null = all regions
+  return SALES_REPORT_EXCEPTIONS[email.toLowerCase()] ?? null
+}
+
 const YEARS = [2024, 2025, 2026]
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -458,7 +472,7 @@ export default function SalgsrapportPage() {
   }
 
   useEffect(() => {
-    if (status === "authenticated" && isAdmin(session?.user?.email)) loadTab("dk")
+    if (status === "authenticated" && canViewSalesReport(session?.user?.email)) loadTab("dk")
   }, [status])
 
   const switchTab = (key: string) => {
@@ -491,7 +505,7 @@ export default function SalgsrapportPage() {
     )
   }
 
-  if (status === "authenticated" && !isAdmin(session?.user?.email)) {
+  if (status === "authenticated" && !canViewSalesReport(session?.user?.email)) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "var(--bg)", gap: 16 }}>
         <div style={{ fontSize: 32 }}>🔒</div>
@@ -504,7 +518,11 @@ export default function SalgsrapportPage() {
     )
   }
 
-  const tabInfo  = TABS.find(t => t.key === activeTab)!
+  const email    = session?.user?.email
+  const regions  = allowedRegions(email)
+  const visibleTabs = regions ? TABS.filter(t => regions.includes(t.key)) : TABS
+
+  const tabInfo  = visibleTabs.find(t => t.key === activeTab) ?? visibleTabs[0]!
   const tabState = tabData[activeTab]
   const report   = typeof tabState === "object" ? tabState : null
 
@@ -537,7 +555,7 @@ export default function SalgsrapportPage() {
 
         {/* Region tabs */}
         <div style={{ display: "flex", gap: 0, borderBottom: "2px solid var(--bdr)" }}>
-          {TABS.map(t => {
+          {visibleTabs.map(t => {
             const active  = t.key === activeTab
             const loading = tabData[t.key] === "loading"
             return (
