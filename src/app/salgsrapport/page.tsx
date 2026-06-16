@@ -465,7 +465,7 @@ export default function SalgsrapportPage() {
       if (prev[region]) return prev
       fetch(`/api/salgsrapport?region=${region}`)
         .then(r => r.json())
-        .then(d  => setTabData(p => ({ ...p, [region]: d })))
+        .then(d  => setTabData(p => ({ ...p, [region]: d?.error ? "error" : d })))
         .catch(() => setTabData(p => ({ ...p, [region]: "error" })))
       return { ...prev, [region]: "loading" }
     })
