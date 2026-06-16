@@ -15,7 +15,7 @@ export default function LoginPage() {
     setLoading(true); setError("")
     const res = await signIn("credentials", { email, password, redirect: false })
     if (res?.ok) {
-      router.push("/dashboard")
+      router.push("/")
     } else {
       setError("Forkert email eller adgangskode")
       setLoading(false)
