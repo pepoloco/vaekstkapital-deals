@@ -16,8 +16,9 @@ const YEARS = [2024, 2025, 2026]
 type RegionConfig = {
   label: string
   currency: string
-  teamName: string | null  // null = all owners; string = fetch members of matching HubSpot team
+  teamName: string | null       // null = all owners; string = fetch members of matching HubSpot team
   requireCoac: boolean
+  hardcodedOwners?: string[]    // if set, bypasses team API and uses this name list directly
 }
 
 const REGIONS: Record<string, RegionConfig> = {
@@ -30,8 +31,9 @@ const REGIONS: Record<string, RegionConfig> = {
   se: {
     label: "Sweden · Phone Sales",
     currency: "SEK",
-    teamName: "team sweden",
-    requireCoac: true,
+    teamName: null,
+    requireCoac: false,
+    hardcodedOwners: ["Simon Otterstedt", "Emil Antonsson"],
   },
   at: {
     label: "Austria",
@@ -43,7 +45,7 @@ const REGIONS: Record<string, RegionConfig> = {
     label: "Shipping",
     currency: "USD",
     teamName: null,
-    requireCoac: false,  // Shipping does not use COACs
+    requireCoac: false,
   },
 }
 
@@ -122,11 +124,12 @@ export async function GET(request: Request) {
   const region = (url.searchParams.get("region") ?? "dk").toLowerCase()
   const config = REGIONS[region] ?? REGIONS.dk
 
-  const [allDeals, owners, ownerFilter] = await Promise.all([
+  const [allDeals, owners, teamNames] = await Promise.all([
     searchDeals(config.currency),
     getOwners(),
     config.teamName ? getTeamOwnerNames(config.teamName) : Promise.resolve(null),
   ])
+  const ownerFilter: string[] | null = config.hardcodedOwners ?? teamNames
 
   type Cell = { amount: number; count: number }
   const data: Record<string, Record<number, Record<number, Cell>>> = {}
