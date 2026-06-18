@@ -166,8 +166,7 @@ export async function GET(request: Request) {
     ownerTotals[consultant] = (ownerTotals[consultant] ?? 0) + amount
   }
 
-  // Team-sourced lists sort by total desc (same as fully-dynamic regions)
-  const consultants = Object.keys(ownerTotals).sort((a, b) => ownerTotals[b] - ownerTotals[a])
+  const consultants = Object.keys(ownerTotals).sort((a, b) => a.localeCompare(b))
 
   return NextResponse.json({
     region,

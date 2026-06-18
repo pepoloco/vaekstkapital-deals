@@ -180,11 +180,7 @@ function buildTable(
     data[name][year][month] = (data[name][year][month] || 0) + 1
   }
 
-  const consultants = Object.keys(data).sort((a, b) => {
-    const ta = Object.values(data[a]).flatMap(y => Object.values(y)).reduce((s, n) => s + n, 0)
-    const tb = Object.values(data[b]).flatMap(y => Object.values(y)).reduce((s, n) => s + n, 0)
-    return tb - ta
-  })
+  const consultants = Object.keys(data).sort((a, b) => a.localeCompare(b))
 
   return { consultants, years: YEARS, data, generatedAt: new Date().toISOString() }
 }
