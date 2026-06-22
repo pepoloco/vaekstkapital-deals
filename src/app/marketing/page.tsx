@@ -26,6 +26,10 @@ interface LiveCampaignRow {
   contacts: number
   deals: number
   dealValueClosed: number | null
+  startDate: string | null
+  endDate: string | null
+  hsUrl: string
+  adPlatforms: string[]
 }
 
 interface LivePlatformRow {
@@ -556,6 +560,169 @@ function LiveCampaignTable({ data }: { data: LiveMarketSync }) {
   )
 }
 
+// ── Live Quarter Section (generic — used for AT, DK, SE, etc.) ───────────────
+
+function LiveQuarterSection({ marketId, liveData }: { marketId: string; liveData: MarketingSyncResult }) {
+  const market = liveData.markets.find(m => m.id === marketId)
+  if (!market || market.campaigns.length === 0) return null
+
+  const fmtDate = (d: string | null) =>
+    d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
+
+  function quarterKey(name: string): string {
+    const m = name.match(/Q(\d)\s*(\d{4})/i)
+    return m ? `Q${m[1]} ${m[2]}` : 'Other'
+  }
+
+  const quarterMap = new Map<string, LiveCampaignRow[]>()
+  for (const c of market.campaigns) {
+    const k = quarterKey(c.campaignName)
+    if (!quarterMap.has(k)) quarterMap.set(k, [])
+    quarterMap.get(k)!.push(c)
+  }
+
+  const quarters = [...quarterMap.keys()].sort((a, b) => {
+    const parse = (q: string) => { const m = q.match(/Q(\d)\s*(\d{4})/); return m ? +m[2] * 4 + +m[1] : 0 }
+    return parse(a) - parse(b)
+  })
+
+  const thS: React.CSSProperties = {
+    padding: '8px 16px', fontSize: 11, fontWeight: 600, letterSpacing: '.05em',
+    textTransform: 'uppercase', color: T.mid, whiteSpace: 'nowrap',
+    borderBottom: `1px solid ${T.border}`, background: T.headerBg,
+  }
+  const tdS = (align: 'left' | 'right', bold = false): React.CSSProperties => ({
+    padding: '10px 16px', fontSize: 13, textAlign: align, fontWeight: bold ? 700 : 400,
+    whiteSpace: 'nowrap', borderBottom: `1px solid ${T.borderLight}`,
+  })
+
+  const allCampaigns = market.campaigns
+  const currency = allCampaigns[0].currency
+  const isActiveAll = allCampaigns.some(c => c.status === 'Active')
+  const startDateAll = allCampaigns.reduce<string | null>((b, c) => !b ? c.startDate : !c.startDate ? b : c.startDate < b ? c.startDate : b, null)
+  const endDateAll   = allCampaigns.reduce<string | null>((b, c) => !b ? c.endDate   : !c.endDate   ? b : c.endDate   > b ? c.endDate   : b, null)
+
+  return (
+    <div style={{
+      background: T.white, border: `1px solid ${T.border}`, borderRadius: 6,
+      overflow: 'hidden', marginBottom: 24, boxShadow: '0 1px 4px rgba(45,62,80,.06)',
+    }}>
+      <div style={{
+        padding: '14px 18px', borderBottom: `1px solid ${T.borderLight}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: T.dark }}>Live — {market.market}</span>
+          <span style={{
+            fontSize: 10, fontWeight: 600, letterSpacing: '.04em', padding: '2px 8px', borderRadius: 10,
+            background: isActiveAll ? 'rgba(0,164,91,.12)' : 'rgba(153,172,194,.18)',
+            color: isActiveAll ? '#00a45b' : T.muted,
+          }}>
+            {isActiveAll ? 'Active' : 'Paused'}
+          </span>
+          {(startDateAll || endDateAll) && (
+            <span style={{ fontSize: 12, color: T.muted }}>
+              {fmtDate(startDateAll)} → {fmtDate(endDateAll)}
+            </span>
+          )}
+        </div>
+        <span style={{ fontSize: 12, color: T.muted }}>{currency}</span>
+      </div>
+
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={{ ...thS, textAlign: 'left' }}>Quarter</th>
+              <th style={{ ...thS, textAlign: 'left' }}>Platform</th>
+              <th style={{ ...thS, textAlign: 'left' }}>Campaign</th>
+              <th style={{ ...thS, textAlign: 'right' }}>Total Spend</th>
+              <th style={{ ...thS, textAlign: 'right' }}># Contacts</th>
+              <th style={{ ...thS, textAlign: 'right' }}># Deals</th>
+              <th style={{ ...thS, textAlign: 'right' }}>Deal Value Closed</th>
+            </tr>
+          </thead>
+          <tbody>
+            {quarters.map(quarter => {
+              const qc = quarterMap.get(quarter)!
+              const totSpend    = qc.reduce((s, c) => s + c.totalSpend, 0)
+              const totContacts = qc.reduce((s, c) => s + c.contacts, 0)
+              const totDeals    = qc.reduce((s, c) => s + c.deals, 0)
+              const totValue    = qc.some(c => c.dealValueClosed !== null)
+                ? qc.reduce((s, c) => s + (c.dealValueClosed ?? 0), 0) : null
+
+              return (
+                <React.Fragment key={quarter}>
+                  {qc.map((c, rowIdx) => (
+                    <tr key={c.campaignName + rowIdx}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = T.rowHover }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}>
+                      {rowIdx === 0 && (
+                        <td rowSpan={qc.length} style={{
+                          padding: '10px 16px', fontSize: 11, fontWeight: 700, letterSpacing: '.06em',
+                          textTransform: 'uppercase', color: T.teal, verticalAlign: 'middle',
+                          borderBottom: `1px solid ${T.border}`, borderLeft: `3px solid ${T.teal}`,
+                          whiteSpace: 'nowrap',
+                        }}>
+                          {quarter}
+                        </td>
+                      )}
+                      <td style={{ ...tdS('left'), color: T.mid }}>{c.platform}</td>
+                      <td style={tdS('left')}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {c.hsUrl
+                            ? <a href={c.hsUrl} target="_blank" rel="noreferrer"
+                                style={{ color: T.dark, textDecoration: 'none', borderBottom: `1px solid ${T.borderLight}` }}
+                                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = T.teal }}
+                                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = T.dark }}>
+                                {c.campaignName}
+                              </a>
+                            : <span style={{ color: T.dark }}>{c.campaignName}</span>
+                          }
+                          <span style={{
+                            fontSize: 10, fontWeight: 600, letterSpacing: '.04em', padding: '2px 7px', borderRadius: 10,
+                            background: c.status === 'Active' ? 'rgba(0,164,91,.12)' : 'rgba(153,172,194,.18)',
+                            color: c.status === 'Active' ? '#00a45b' : T.muted,
+                          }}>
+                            {c.status}
+                          </span>
+                        </span>
+                      </td>
+                      <td style={{ ...tdS('right'), color: c.totalSpend > 0 ? T.teal : T.muted }}>
+                        {fmtCurrency(c.totalSpend, currency)}
+                      </td>
+                      <td style={{ ...tdS('right'), color: c.contacts > 0 ? T.teal : T.muted }}>
+                        {fmtInt(c.contacts)}
+                      </td>
+                      <td style={{ ...tdS('right'), color: c.deals > 0 ? T.teal : T.muted }}>
+                        {fmtInt(c.deals)}
+                      </td>
+                      <td style={{ ...tdS('right'), color: T.muted }}>
+                        {c.dealValueClosed !== null ? fmtCurrency(c.dealValueClosed, currency) : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                  <tr style={{ background: T.totalBg, borderTop: `2px solid ${T.border}` }}>
+                    <td colSpan={3} style={{ ...tdS('left', true), borderBottom: 'none', color: T.dark, borderLeft: `3px solid ${T.teal}` }}>
+                      {quarter} Total
+                    </td>
+                    <td style={{ ...tdS('right', true), borderBottom: 'none' }}>{fmtCurrency(totSpend, currency)}</td>
+                    <td style={{ ...tdS('right', true), borderBottom: 'none' }}>{fmtInt(totContacts)}</td>
+                    <td style={{ ...tdS('right', true), borderBottom: 'none' }}>{fmtInt(totDeals)}</td>
+                    <td style={{ ...tdS('right', true), borderBottom: 'none' }}>
+                      {totValue !== null ? fmtCurrency(totValue, currency) : '—'}
+                    </td>
+                  </tr>
+                </React.Fragment>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 type Year = '2025' | '2026'
@@ -737,12 +904,18 @@ export default function MarketingDashboardPage() {
             </div>
           )}
 
-          {liveData && liveData.markets.map(market => (
-            <React.Fragment key={market.id}>
-              <LiveMarketTable data={market} />
-              <LiveCampaignTable data={market} />
-            </React.Fragment>
-          ))}
+          {liveData && liveData.markets
+            .filter(m => m.id !== 'at' && m.id !== 'se' && m.id !== 'dk')
+            .map(market => (
+              <React.Fragment key={market.id}>
+                <LiveMarketTable data={market} />
+                <LiveCampaignTable data={market} />
+              </React.Fragment>
+            ))
+          }
+          {liveData && <LiveQuarterSection marketId="dk" liveData={liveData} />}
+          {liveData && <LiveQuarterSection marketId="se" liveData={liveData} />}
+          {liveData && <LiveQuarterSection marketId="at" liveData={liveData} />}
           </>}
         </main>
       </div>

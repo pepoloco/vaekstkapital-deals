@@ -113,8 +113,8 @@ export const PLATFORM_DATA_2026: MarketOverview[] = [
     rows: [
       // LinkedIn: zero spend across all markets in 2026
       { platform: 'LinkedIn', totalSpend:       0.00, leads:   0, gradeD:   0, deals: 0, dealValueClosed: null          },
-      // Meta: DK + SE + AT — spend converted to DKK; AT full YTD (156 375 DKK)
-      { platform: 'Meta',     totalSpend:  420542.20, leads: 479, gradeD: 333, deals: 9, dealValueClosed: 9401340.00    },
+      // Meta: DK + SE + AT — spend converted to DKK; AT full YTD (171 538 DKK = 22 981.14 EUR × 7.46)
+      { platform: 'Meta',     totalSpend:  422561.52, leads: 479, gradeD: 333, deals: 9, dealValueClosed: 9401340.00    },
     ],
   },
   {
@@ -146,12 +146,12 @@ export const PLATFORM_DATA_2026: MarketOverview[] = [
     // No AT LinkedIn account in HubSpot Ads Manager
     // Source: AT YTD export Jan 1 – Jun 12, 2026 (confirmed identical to all-time amounts)
     rows: [
-      { platform: 'Meta', totalSpend: 20961.82, leads: 291, gradeD: 110, deals: 0, dealValueClosed: null },
+      { platform: 'Meta', totalSpend: 22981.14, leads: 815, gradeD: 110, deals: 0, dealValueClosed: null },
     ],
     campaigns: [
-      // contacts = HubSpot "Total Contacts" column from AT YTD export (Jun 12 2026)
+      // contacts = HubSpot Ads Manager "Total Contacts" (Jun 22 2026)
       { campaignName: 'BU AT - S: Download',         platform: 'Meta', status: 'Paused', totalSpend: 10754.35, contacts: 632, gradeD:  85, deals: 0, dealValueClosed: null },
-      { campaignName: 'General about Vaekstkapital',  platform: 'Meta', status: 'Active', totalSpend:  5406.09, contacts:  73, gradeD:   0, deals: 0, dealValueClosed: null },
+      { campaignName: 'General about Vaekstkapital',  platform: 'Meta', status: 'Paused', totalSpend:  7425.41, contacts: 114, gradeD:   0, deals: 0, dealValueClosed: null },
       { campaignName: 'BU AT - S: Direct',            platform: 'Meta', status: 'Paused', totalSpend:  4801.38, contacts:  69, gradeD:  25, deals: 0, dealValueClosed: null },
     ],
   },
