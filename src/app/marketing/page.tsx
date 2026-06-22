@@ -689,13 +689,14 @@ export default function MarketingDashboardPage() {
             </p>
           </div>
 
-          {data.map(market =>
+          {year === '2025' && data.map(market =>
             market.campaigns
               ? <CampaignBreakdownTable key={`${year}-${market.id}`} data={market} />
               : <MarketTable           key={`${year}-${market.id}`} data={market} />
           )}
 
-          {/* ── Live HubSpot sync (Contacts/Deals/Value only — Spend manual, Grade D+ unavailable) ── */}
+          {/* ── Live HubSpot sync — 2026 only (Contacts/Deals/Value only — Spend manual, Grade D+ unavailable) ── */}
+          {year === '2026' && <>
           <div style={{ marginTop: 44, marginBottom: 16, paddingTop: 28, borderTop: `2px solid ${T.border}` }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
               <div>
@@ -742,6 +743,7 @@ export default function MarketingDashboardPage() {
               <LiveCampaignTable data={market} />
             </React.Fragment>
           ))}
+          </>}
         </main>
       </div>
     </>
