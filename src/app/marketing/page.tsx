@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import type { MarketOverview, PlatformRow, CampaignRow } from '@/data/marketing-platform-data'
+import type { MarketOverview, PlatformRow, CampaignRow as StaticCampaignRow } from '@/data/marketing-platform-data'
 import { PLATFORM_DATA_2025, PLATFORM_DATA_2026 } from '@/data/marketing-platform-data'
 
 const ALLOWED_DOMAINS = new Set(['vkfunddistribution.com', 'vaekstholdings.com'])
@@ -12,6 +12,41 @@ function canAccess(email?: string | null): boolean {
   if (!email) return false
   const domain = email.toLowerCase().split('@')[1] ?? ''
   return ALLOWED_DOMAINS.has(domain)
+}
+
+// ── Live sync data types (mirrors src/lib/marketing-sync.ts output) ─────────
+
+interface LiveCampaignRow {
+  campaignName: string
+  platform: string
+  status: string
+  market: string
+  totalSpend: number
+  currency: string
+  contacts: number
+  deals: number
+  dealValueClosed: number | null
+}
+
+interface LivePlatformRow {
+  platform: string
+  totalSpend: number
+  leads: number
+  deals: number
+  dealValueClosed: number | null
+}
+
+interface LiveMarketSync {
+  id: string
+  market: string
+  currency: string
+  rows: LivePlatformRow[]
+  campaigns: LiveCampaignRow[]
+}
+
+interface MarketingSyncResult {
+  markets: LiveMarketSync[]
+  generatedAt: string
 }
 
 // ── Design tokens (HubSpot palette) ─────────────────────────────────────────
@@ -301,7 +336,7 @@ function CampaignBreakdownTable({ data }: { data: MarketOverview }) {
           </thead>
           <tbody>
             {platforms.map(platform => {
-              const rows: CampaignRow[] = campaigns.filter(c => c.platform === platform)
+              const rows: StaticCampaignRow[] = campaigns.filter(c => c.platform === platform)
 
               const totSpend    = rows.reduce((s, r) => s + r.totalSpend, 0)
               const totContacts = rows.reduce((s, r) => s + r.contacts, 0)
@@ -400,6 +435,127 @@ function CampaignBreakdownTable({ data }: { data: MarketOverview }) {
   )
 }
 
+// ── Live sync tables ──────────────────────────────────────────────────────────
+
+function LiveMarketTable({ data }: { data: LiveMarketSync }) {
+  if (data.rows.length === 0) return null
+
+  const total: LivePlatformRow = {
+    platform:        'Report Total',
+    totalSpend:      data.rows.reduce((s, r) => s + r.totalSpend, 0),
+    leads:           data.rows.reduce((s, r) => s + r.leads, 0),
+    deals:           data.rows.reduce((s, r) => s + r.deals, 0),
+    dealValueClosed: data.rows.some(r => r.dealValueClosed !== null)
+      ? data.rows.reduce((s, r) => s + (r.dealValueClosed ?? 0), 0)
+      : null,
+  }
+
+  const cols: { key: keyof LivePlatformRow; label: string; align: 'left' | 'right' }[] = [
+    { key: 'platform',        label: 'Platform',          align: 'left'  },
+    { key: 'totalSpend',      label: 'Total Spend',       align: 'right' },
+    { key: 'leads',           label: '# Contacts',        align: 'right' },
+    { key: 'deals',           label: '# Deals',           align: 'right' },
+    { key: 'dealValueClosed', label: 'Deal Value Closed', align: 'right' },
+  ]
+
+  const cellVal = (row: LivePlatformRow, key: keyof LivePlatformRow): string => {
+    const v = row[key]
+    if (key === 'platform') return row.platform
+    if (key === 'totalSpend') return fmtCurrency(v as number, data.currency)
+    if (key === 'dealValueClosed') return v !== null ? fmtCurrency(v as number, data.currency) : '—'
+    return fmtInt(v as number)
+  }
+
+  const thS: React.CSSProperties = {
+    padding: '8px 16px', fontSize: 11, fontWeight: 600, letterSpacing: '.05em',
+    textTransform: 'uppercase', color: T.mid, whiteSpace: 'nowrap',
+    borderBottom: `1px solid ${T.border}`, background: T.headerBg,
+  }
+  const tdS = (align: 'left' | 'right', bold = false): React.CSSProperties => ({
+    padding: '10px 16px', fontSize: 13, textAlign: align, fontWeight: bold ? 700 : 400,
+    whiteSpace: 'nowrap', borderBottom: `1px solid ${T.borderLight}`,
+  })
+
+  return (
+    <div style={{
+      background: T.white, border: `1px solid ${T.border}`, borderRadius: 6,
+      overflow: 'hidden', marginBottom: 16, boxShadow: '0 1px 4px rgba(45,62,80,.06)',
+    }}>
+      <div style={{ padding: '14px 18px', borderBottom: `1px solid ${T.borderLight}`, display: 'flex', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 14, fontWeight: 600, color: T.dark }}>Live — {data.market}</span>
+        <span style={{ fontSize: 12, color: T.muted }}>{data.currency}</span>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>{cols.map(c => <th key={c.key} style={{ ...thS, textAlign: c.align }}>{c.label}</th>)}</tr>
+          </thead>
+          <tbody>
+            {data.rows.map(row => (
+              <tr key={row.platform}>
+                {cols.map(c => <td key={c.key} style={{ ...tdS(c.align), color: c.key === 'platform' ? T.dark : T.teal }}>{cellVal(row, c.key)}</td>)}
+              </tr>
+            ))}
+            <tr style={{ background: T.totalBg, borderTop: `2px solid ${T.border}` }}>
+              {cols.map(c => <td key={c.key} style={{ ...tdS(c.align, true), borderBottom: 'none' }}>{cellVal(total, c.key)}</td>)}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function LiveCampaignTable({ data }: { data: LiveMarketSync }) {
+  if (data.campaigns.length === 0) return null
+
+  const cols: { key: string; label: string; align: 'left' | 'right' }[] = [
+    { key: 'platform',        label: 'Platform',          align: 'left'  },
+    { key: 'campaignName',    label: 'Campaign',          align: 'left'  },
+    { key: 'totalSpend',      label: 'Total Spend',       align: 'right' },
+    { key: 'contacts',        label: '# Contacts',        align: 'right' },
+    { key: 'deals',           label: '# Deals',           align: 'right' },
+    { key: 'dealValueClosed', label: 'Deal Value Closed', align: 'right' },
+  ]
+
+  const thS: React.CSSProperties = {
+    padding: '8px 16px', fontSize: 11, fontWeight: 600, letterSpacing: '.05em',
+    textTransform: 'uppercase', color: T.mid, whiteSpace: 'nowrap',
+    borderBottom: `1px solid ${T.border}`, background: T.headerBg,
+  }
+  const tdS: React.CSSProperties = {
+    padding: '10px 16px', fontSize: 13, whiteSpace: 'nowrap', borderBottom: `1px solid ${T.borderLight}`,
+  }
+
+  return (
+    <div style={{
+      background: T.white, border: `1px solid ${T.border}`, borderRadius: 6,
+      overflow: 'hidden', marginBottom: 24, boxShadow: '0 1px 4px rgba(45,62,80,.06)',
+    }}>
+      <div style={{ padding: '14px 18px', borderBottom: `1px solid ${T.borderLight}` }}>
+        <span style={{ fontSize: 14, fontWeight: 600, color: T.dark }}>Live Campaigns — {data.market}</span>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr>{cols.map(c => <th key={c.key} style={{ ...thS, textAlign: c.align }}>{c.label}</th>)}</tr></thead>
+          <tbody>
+            {data.campaigns.map((c, i) => (
+              <tr key={c.campaignName + i}>
+                <td style={{ ...tdS, color: T.teal, fontWeight: 600 }}>{c.platform}</td>
+                <td style={{ ...tdS, color: T.dark }}>{c.campaignName}</td>
+                <td style={{ ...tdS, textAlign: 'right' }}>{fmtCurrency(c.totalSpend, c.currency)}</td>
+                <td style={{ ...tdS, textAlign: 'right', color: T.teal }}>{fmtInt(c.contacts)}</td>
+                <td style={{ ...tdS, textAlign: 'right', color: T.teal }}>{fmtInt(c.deals)}</td>
+                <td style={{ ...tdS, textAlign: 'right' }}>{c.dealValueClosed !== null ? fmtCurrency(c.dealValueClosed, c.currency) : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 type Year = '2025' | '2026'
@@ -414,10 +570,50 @@ export default function MarketingDashboardPage() {
   const router = useRouter()
   const [year, setYear] = useState<Year>('2026')
 
+  const [liveData, setLiveData] = useState<MarketingSyncResult | null>(null)
+  const [liveLoading, setLiveLoading] = useState(true)
+  const [liveSyncing, setLiveSyncing] = useState(false)
+  const [liveError, setLiveError] = useState<string | null>(null)
+
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login')
     if (status === 'authenticated' && !canAccess(session?.user?.email)) router.push('/')
   }, [status, session, router])
+
+  async function loadLiveData() {
+    setLiveLoading(true)
+    setLiveError(null)
+    try {
+      const res = await fetch('/api/marketing-data')
+      if (res.status === 404) { setLiveData(null); return }
+      const json = await res.json()
+      if (json.error) { setLiveError(json.error); return }
+      setLiveData(json)
+    } catch (e: any) {
+      setLiveError(e.message)
+    } finally {
+      setLiveLoading(false)
+    }
+  }
+
+  async function runLiveSync() {
+    setLiveSyncing(true)
+    setLiveError(null)
+    try {
+      const res = await fetch('/api/marketing-sync', { method: 'POST' })
+      const json = await res.json()
+      if (json.error) { setLiveError(json.error); return }
+      await loadLiveData()
+    } catch (e: any) {
+      setLiveError(e.message)
+    } finally {
+      setLiveSyncing(false)
+    }
+  }
+
+  useEffect(() => {
+    if (status === 'authenticated' && canAccess(session?.user?.email)) loadLiveData()
+  }, [status])
 
   if (status === 'loading' || status === 'unauthenticated') {
     return (
@@ -498,6 +694,54 @@ export default function MarketingDashboardPage() {
               ? <CampaignBreakdownTable key={`${year}-${market.id}`} data={market} />
               : <MarketTable           key={`${year}-${market.id}`} data={market} />
           )}
+
+          {/* ── Live HubSpot sync (Contacts/Deals/Value only — Spend manual, Grade D+ unavailable) ── */}
+          <div style={{ marginTop: 44, marginBottom: 16, paddingTop: 28, borderTop: `2px solid ${T.border}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+              <div>
+                <h2 style={{ fontSize: 16, fontWeight: 700, color: T.dark, margin: 0 }}>Live Campaign Sync</h2>
+                <p style={{ fontSize: 12, color: T.muted, margin: '4px 0 0' }}>
+                  Pulled live from HubSpot Campaigns (Contacts/Deals/Value) · Total Spend is manually entered in HubSpot ·
+                  Most ad campaigns aren't linked to this hierarchy yet, so coverage is currently partial
+                  {liveData && <> · Last synced: {new Date(liveData.generatedAt).toLocaleString('en-GB')}</>}
+                </p>
+              </div>
+              <button onClick={runLiveSync} disabled={liveSyncing}
+                style={{
+                  padding: '9px 20px', borderRadius: 6, border: 'none', background: T.teal, color: '#fff',
+                  fontSize: 13, fontWeight: 600, cursor: liveSyncing ? 'default' : 'pointer', fontFamily: 'inherit',
+                  opacity: liveSyncing ? 0.7 : 1,
+                }}>
+                {liveSyncing ? 'Syncing…' : 'Sync now'}
+              </button>
+            </div>
+          </div>
+
+          {liveError && (
+            <div style={{
+              padding: '14px 18px', borderRadius: 6, background: 'rgba(255,122,76,.1)',
+              border: '1px solid rgba(255,122,76,.3)', color: '#c0392b', fontSize: 13, marginBottom: 20,
+            }}>
+              ⚠ {liveError}
+            </div>
+          )}
+
+          {liveLoading && (
+            <div style={{ padding: 24, textAlign: 'center', color: T.muted, fontSize: 13 }}>Loading live data…</div>
+          )}
+
+          {!liveLoading && !liveData && !liveError && (
+            <div style={{ padding: 24, textAlign: 'center', color: T.muted, fontSize: 13 }}>
+              No live data synced yet — click "Sync now".
+            </div>
+          )}
+
+          {liveData && liveData.markets.map(market => (
+            <React.Fragment key={market.id}>
+              <LiveMarketTable data={market} />
+              <LiveCampaignTable data={market} />
+            </React.Fragment>
+          ))}
         </main>
       </div>
     </>
