@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 
 const PORTAL = "144061788"
 const ADMIN_DOMAINS = new Set(["vaekstholdings.com", "vkfunddistribution.com"])
+const ADMIN_EMAILS = new Set(["tlm@vaekstnet.com"])
 const DK_EXCEPTIONS = new Set(["brj@vaekstkapital.dk","tnp@vaekstkapital.dk","sok@vaekstkapital.dk","aro@vaekstkapital.dk","sts@vaekstkapital.dk"])
 const SE_EXCEPTIONS = new Set(["spo@vaekstkapital.se","acs@vaekstkapital.se","nry@vaekstkapital.se"])
 
@@ -13,7 +14,7 @@ const isAdmin = (email?: string | null) => {
   if (!email) return false
   const lc = email.toLowerCase()
   const domain = lc.split("@")[1] ?? ""
-  return ADMIN_DOMAINS.has(domain) || domain === "vaekstkapital.at" || DK_EXCEPTIONS.has(lc) || SE_EXCEPTIONS.has(lc)
+  return ADMIN_DOMAINS.has(domain) || ADMIN_EMAILS.has(lc) || domain === "vaekstkapital.at" || DK_EXCEPTIONS.has(lc) || SE_EXCEPTIONS.has(lc)
 }
 
 // Returns which country columns this user may see ("DK" | "SE")[]
@@ -21,7 +22,7 @@ function getAllowedCountries(email?: string | null): Array<"DK" | "SE"> {
   if (!email) return []
   const lc = email.toLowerCase()
   const domain = lc.split("@")[1] ?? ""
-  if (ADMIN_DOMAINS.has(domain) || domain === "vaekstkapital.at") return ["DK", "SE"]
+  if (ADMIN_DOMAINS.has(domain) || ADMIN_EMAILS.has(lc) || domain === "vaekstkapital.at") return ["DK", "SE"]
   if (SE_EXCEPTIONS.has(lc) || domain === "vaekstkapital.se") return ["SE"]
   if (DK_EXCEPTIONS.has(lc) || domain === "vaekstkapital.dk") return ["DK"]
   return ["DK", "SE"]

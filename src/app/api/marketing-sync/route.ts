@@ -6,8 +6,9 @@ import { runMarketingSync } from "@/lib/marketing-sync"
 export const maxDuration = 60
 
 const ADMIN_DOMAINS = ["vaekstholdings.com", "vkfunddistribution.com"]
+const ADMIN_EMAILS = new Set(["tlm@vaekstnet.com"])
 const isAdmin = (email?: string | null) =>
-  !!email && ADMIN_DOMAINS.includes(email.split("@")[1]?.toLowerCase() ?? "")
+  !!email && (ADMIN_DOMAINS.includes(email.split("@")[1]?.toLowerCase() ?? "") || ADMIN_EMAILS.has(email.toLowerCase()))
 
 const UPSTASH_URL   = process.env.KV_REST_API_URL   ?? process.env.UPSTASH_REST_API_URL
 const UPSTASH_TOKEN = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REST_API_TOKEN

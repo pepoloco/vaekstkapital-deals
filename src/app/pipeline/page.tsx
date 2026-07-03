@@ -97,6 +97,7 @@ const REGION_TO_BRAND: Record<string, string> = {
 
 const PIPELINE_ALLOWED_EMAILS = new Set(["brj@vaekstkapital.dk","tnp@vaekstkapital.dk","sok@vaekstkapital.dk","aro@vaekstkapital.dk","sts@vaekstkapital.dk","spo@vaekstkapital.se","acs@vaekstkapital.se","nry@vaekstkapital.se"])
 const ADMIN_DOMAINS = new Set(["vkfunddistribution.com","vaekstholdings.com"])
+const ADMIN_EMAILS = new Set(["tlm@vaekstnet.com"])
 // Non-admin domains that have pipeline access → locked to their own brand
 const DOMAIN_TO_BRAND: Record<string, string> = {
   "vaekstkapital.dk": "0",
@@ -122,9 +123,9 @@ export default function PipelinePage() {
     if (status === "authenticated") {
       const email = session?.user?.email?.toLowerCase() ?? ""
       const domain = email.split("@")[1] ?? ""
-      const allowed = ADMIN_DOMAINS.has(domain) || domain === "vaekstkapital.at" || PIPELINE_ALLOWED_EMAILS.has(email)
+      const allowed = ADMIN_DOMAINS.has(domain) || ADMIN_EMAILS.has(email) || domain === "vaekstkapital.at" || PIPELINE_ALLOWED_EMAILS.has(email)
       if (!allowed) { router.push("/"); return }
-      const admin = ADMIN_DOMAINS.has(domain)
+      const admin = ADMIN_DOMAINS.has(domain) || ADMIN_EMAILS.has(email)
       setIsAdmin(admin)
       if (!admin) {
         // Non-admins locked to their own brand

@@ -28,6 +28,7 @@ const COUNTRY_DOMAIN: Record<string, string> = {
 }
 
 const ADMIN_DOMAINS = new Set(["vkfunddistribution.com", "vaekstholdings.com"])
+const ADMIN_EMAILS = new Set(["tlm@vaekstnet.com"])
 
 // DK exceptions: Contact Pipeline + Investor Tour (not Sales Report)
 const DK_EXCEPTIONS = new Set(["brj@vaekstkapital.dk","tnp@vaekstkapital.dk","sok@vaekstkapital.dk","aro@vaekstkapital.dk","sts@vaekstkapital.dk"])
@@ -40,7 +41,7 @@ function getAccess(email?: string | null) {
   if (!email) return { isAdmin: false, canPipelineTour: false, canSalesReport: false, myCountryKey: null as string | null }
   const lc = email.toLowerCase()
   const domain = lc.split("@")[1] ?? ""
-  const isAdmin = ADMIN_DOMAINS.has(domain)
+  const isAdmin = ADMIN_DOMAINS.has(domain) || ADMIN_EMAILS.has(lc)
   // AT domain users get Contact Pipeline + Investor Tour
   const canPipelineTour = isAdmin || DK_EXCEPTIONS.has(lc) || SE_EXCEPTIONS.has(lc) || domain === "vaekstkapital.at"
   const canSalesReport  = isAdmin || SALES_REPORT_EXCEPTIONS.has(lc)

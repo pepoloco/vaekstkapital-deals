@@ -3,8 +3,9 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/authOptions"
 
 const ADMIN_DOMAINS = ["vaekstholdings.com", "vkfunddistribution.com"]
+const ADMIN_EMAILS = new Set(["tlm@vaekstnet.com"])
 const isAdmin = (email?: string | null) =>
-  !!email && ADMIN_DOMAINS.includes(email.split("@")[1]?.toLowerCase() ?? "")
+  !!email && (ADMIN_DOMAINS.includes(email.split("@")[1]?.toLowerCase() ?? "") || ADMIN_EMAILS.has(email.toLowerCase()))
 
 const SALES_REPORT_EXCEPTIONS = new Set(["sok@vaekstkapital.dk"])
 const canAccess = (email?: string | null) =>

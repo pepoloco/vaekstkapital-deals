@@ -761,14 +761,15 @@ export default function Dashboard() {
   const userEmail = session?.user?.email?.toLowerCase() ?? ""
   const userDomain = userEmail.split("@")[1] ?? ""
   const PIPELINE_ALLOWED = new Set(["brj@vaekstkapital.dk","tnp@vaekstkapital.dk","sok@vaekstkapital.dk","aro@vaekstkapital.dk","sts@vaekstkapital.dk","spo@vaekstkapital.se","acs@vaekstkapital.se","nry@vaekstkapital.se"])
-  const isAdminDomain     = userDomain === "vkfunddistribution.com" || userDomain === "vaekstholdings.com"
+  const ADMIN_EMAILS = new Set(["tlm@vaekstnet.com"])
+  const isAdminDomain     = userDomain === "vkfunddistribution.com" || userDomain === "vaekstholdings.com" || ADMIN_EMAILS.has(userEmail)
   const canAccessPipeline = isAdminDomain || userDomain === "vaekstkapital.at" || PIPELINE_ALLOWED.has(userEmail)
-  const canAccessDK   = ["vaekstkapital.dk", "vkfunddistribution.com", "vaekstholdings.com"].includes(userDomain)
-  const canAccessSE   = ["vaekstkapital.se", "vkfunddistribution.com", "vaekstholdings.com"].includes(userDomain)
-  const canAccessShip = ["vkfunddistribution.com", "vk-shipping.com", "vaekstholdings.com"].includes(userDomain)
-  const canAccessAT   = ["vaekstkapital.at", "vaekstholdings.com", "vkfunddistribution.com"].includes(userDomain)
-  const canAccessFI   = ["vaekstkapital.fi", "vkfunddistribution.com", "vaekstholdings.com"].includes(userDomain)
-  const canAccessNO   = ["vaekstkapital.no", "vkfunddistribution.com", "vaekstholdings.com"].includes(userDomain)
+  const canAccessDK   = isAdminDomain || ["vaekstkapital.dk", "vkfunddistribution.com", "vaekstholdings.com"].includes(userDomain)
+  const canAccessSE   = isAdminDomain || ["vaekstkapital.se", "vkfunddistribution.com", "vaekstholdings.com"].includes(userDomain)
+  const canAccessShip = isAdminDomain || ["vkfunddistribution.com", "vk-shipping.com", "vaekstholdings.com"].includes(userDomain)
+  const canAccessAT   = isAdminDomain || ["vaekstkapital.at", "vaekstholdings.com", "vkfunddistribution.com"].includes(userDomain)
+  const canAccessFI   = isAdminDomain || ["vaekstkapital.fi", "vkfunddistribution.com", "vaekstholdings.com"].includes(userDomain)
+  const canAccessNO   = isAdminDomain || ["vaekstkapital.no", "vkfunddistribution.com", "vaekstholdings.com"].includes(userDomain)
   const maxFund        = data?.funds?.[0]?.amount ?? 1
   const maxScriveFund  = data?.seller.scriveFunds?.[0]?.amount ?? 1
   const maxPending     = data?.fundsPending?.[0]?.amount ?? 1

@@ -5,8 +5,9 @@ import { useSession, signOut } from "next-auth/react"
 import { useRouter } from "next/navigation"
 
 const ADMIN_DOMAINS = ["vaekstholdings.com", "vkfunddistribution.com"]
+const ADMIN_EMAILS = new Set(["tlm@vaekstnet.com"])
 const isAdmin = (email?: string | null) =>
-  !!email && ADMIN_DOMAINS.includes(email?.split("@")[1]?.toLowerCase() ?? "")
+  !!email && (ADMIN_DOMAINS.includes(email?.split("@")[1]?.toLowerCase() ?? "") || ADMIN_EMAILS.has(email.toLowerCase()))
 
 // Non-admin emails granted Sales Report access, mapped to the regions they can see
 const SALES_REPORT_EXCEPTIONS: Record<string, string[]> = {
