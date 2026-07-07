@@ -1,6 +1,6 @@
 "use client"
 // @ts-nocheck
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useSession, signOut } from "next-auth/react"
 import { useRouter } from "next/navigation"
 
@@ -94,7 +94,8 @@ function fmtCell(n: number): string {
   return Math.round(n).toLocaleString("en-DK")
 }
 
-type Cell = { amount: number; count: number }
+type DealRef = { id: string; name: string; amount: number }
+type Cell = { amount: number; count: number; deals?: DealRef[] }
 type ReportData = {
   region: string
   label: string
@@ -114,8 +115,63 @@ function FlagImg({ src, label }: { src: string; label: string }) {
   )
 }
 
+const HS_PORTAL = "144061788"
+
+function DealPopover({ deals, currency, x, y, onClose }: {
+  deals: DealRef[]
+  currency: string
+  x: number
+  y: number
+  onClose: () => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [onClose])
+
+  // Keep popover on screen horizontally
+  const popW = 340
+  const left = x + popW > window.innerWidth - 12 ? x - popW - 4 : x + 8
+  const top  = Math.max(8, Math.min(y - 20, window.innerHeight - 320))
+
+  return (
+    <div ref={ref} style={{
+      position: "fixed", left, top, zIndex: 9999,
+      background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8,
+      boxShadow: "0 8px 24px rgba(0,0,0,.18)",
+      minWidth: 280, width: popW, maxHeight: 320, overflowY: "auto",
+      fontSize: 12,
+    }}>
+      <div style={{ padding: "9px 14px", borderBottom: "1px solid #f3f4f6", fontSize: 10, fontWeight: 700, color: "#6b7280", letterSpacing: ".07em", textTransform: "uppercase" }}>
+        {deals.length} Deal{deals.length !== 1 ? "s" : ""}
+      </div>
+      {deals.map((d, i) => (
+        <a key={d.id}
+          href={`https://app-eu1.hubspot.com/contacts/${HS_PORTAL}/deal/${d.id}`}
+          target="_blank" rel="noopener noreferrer"
+          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+            padding: "9px 14px", textDecoration: "none", color: "inherit",
+            borderBottom: i < deals.length - 1 ? "1px solid #f9fafb" : "none" }}
+          onMouseOver={e => { (e.currentTarget as HTMLElement).style.background = "#f9fafb" }}
+          onMouseOut={e  => { (e.currentTarget as HTMLElement).style.background = "transparent" }}
+        >
+          <span style={{ color: "#111827", fontWeight: 500, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.name}</span>
+          <span style={{ color: "#0091ae", fontWeight: 700, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
+            {fmtCell(d.amount)} <span style={{ fontSize: 10, color: "#9ca3af" }}>↗</span>
+          </span>
+        </a>
+      ))}
+    </div>
+  )
+}
+
 function SalesTable({ report }: { report: ReportData }) {
   const { region, currency, consultants, data } = report
+  const [popover, setPopover] = useState<{ deals: DealRef[]; x: number; y: number } | null>(null)
 
   if (consultants.length === 0) {
     return (
@@ -137,7 +193,17 @@ function SalesTable({ report }: { report: ReportData }) {
   const bdr2 = "2px solid var(--bdr)"
 
   return (
-    <div style={{ overflowX: "auto" }}>
+    <>
+      {popover && (
+        <DealPopover
+          deals={popover.deals}
+          currency={currency}
+          x={popover.x}
+          y={popover.y}
+          onClose={() => setPopover(null)}
+        />
+      )}
+      <div style={{ overflowX: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
         <thead>
           <tr>
@@ -243,18 +309,26 @@ function SalesTable({ report }: { report: ReportData }) {
                 }}>{month}</td>
                 {consultants.map((c, ci) =>
                   YEARS.map((y, yi) => {
-                    const cell   = data[c]?.[y]?.[monthNum]
-                    const amount = cell?.amount ?? 0
-                    const count  = cell?.count  ?? 0
-                    const isLast = yi === YEARS.length - 1
-                    const clr    = getClr(c, ci, region)
+                    const cell    = data[c]?.[y]?.[monthNum]
+                    const amount  = cell?.amount ?? 0
+                    const count   = cell?.count  ?? 0
+                    const deals   = cell?.deals  ?? []
+                    const isLast  = yi === YEARS.length - 1
+                    const clr     = getClr(c, ci, region)
+                    const clickable = amount > 0 && deals.length > 0
                     return (
-                      <td key={`${c}-${y}`} style={{
-                        padding: "7px 10px", textAlign: "right",
-                        fontVariantNumeric: "tabular-nums",
-                        borderRight: isLast ? bdr2 : bdr, borderBottom: bdr,
-                        verticalAlign: "middle",
-                      }}>
+                      <td key={`${c}-${y}`}
+                        onClick={clickable ? (e) => {
+                          e.stopPropagation()
+                          setPopover({ deals, x: e.clientX, y: e.clientY })
+                        } : undefined}
+                        style={{
+                          padding: "7px 10px", textAlign: "right",
+                          fontVariantNumeric: "tabular-nums",
+                          borderRight: isLast ? bdr2 : bdr, borderBottom: bdr,
+                          verticalAlign: "middle",
+                          cursor: clickable ? "pointer" : "default",
+                        }}>
                         {amount > 0 ? (
                           <>
                             <div style={{ fontSize: 13, fontWeight: 700, color: clr.bg, lineHeight: 1.2 }}>
@@ -302,7 +376,8 @@ function SalesTable({ report }: { report: ReportData }) {
           </tr>
         </tfoot>
       </table>
-    </div>
+      </div>
+    </>
   )
 }
 

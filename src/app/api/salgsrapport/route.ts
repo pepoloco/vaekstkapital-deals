@@ -21,6 +21,7 @@ const YEARS = [2024, 2025, 2026]
 type RegionConfig = {
   label: string
   currency: string
+  currencies: string[]          // currency codes to search (OR); SE includes DKK for SEE pipeline deals
   teamName: string | null       // null = all owners; string = fetch members of matching HubSpot team
   requireCoac: boolean
   hardcodedOwners?: string[]    // if set, bypasses team API and uses this name list directly
@@ -30,12 +31,14 @@ const REGIONS: Record<string, RegionConfig> = {
   dk: {
     label: "Denmark · Phone Sales",
     currency: "DKK",
+    currencies: ["DKK"],
     teamName: "team denmark",
     requireCoac: true,
   },
   se: {
     label: "Sweden · Phone Sales",
     currency: "SEK",
+    currencies: ["SEK", "DKK"],  // SEE Residential pipeline uses DKK
     teamName: null,
     requireCoac: false,
     hardcodedOwners: ["Simon Otterstedt", "Emil Antonsson"],
@@ -43,12 +46,14 @@ const REGIONS: Record<string, RegionConfig> = {
   at: {
     label: "Austria",
     currency: "EUR",
+    currencies: ["EUR"],
     teamName: "team austria",
     requireCoac: true,
   },
   shipping: {
     label: "Shipping",
     currency: "USD",
+    currencies: ["USD"],
     teamName: null,
     requireCoac: false,
   },
@@ -80,7 +85,7 @@ async function getOwners(): Promise<Record<string, string>> {
   return byId
 }
 
-async function searchDeals(currency: string): Promise<Record<string, string>[]> {
+async function searchDeals(currencies: string[]): Promise<Record<string, string>[]> {
   const results: Record<string, string>[] = []
   let after: string | undefined
   const startMs = new Date("2024-01-01").getTime()
@@ -89,15 +94,16 @@ async function searchDeals(currency: string): Promise<Record<string, string>[]> 
   do {
     await sleep(200)
     const body: Record<string, unknown> = {
-      filterGroups: [{
+      // Multiple filterGroups = OR — one per currency so e.g. SE gets both SEK and DKK deals
+      filterGroups: currencies.map(curr => ({
         filters: [
           { propertyName: "hs_is_closed_won",  operator: "EQ",  value: "true"          },
-          { propertyName: "deal_currency_code", operator: "EQ",  value: currency        },
+          { propertyName: "deal_currency_code", operator: "EQ",  value: curr            },
           { propertyName: "closedate",          operator: "GTE", value: String(startMs) },
           { propertyName: "closedate",          operator: "LTE", value: String(endMs)   },
         ],
-      }],
-      properties: ["amount", "closedate", "checked_by_coacs", "hubspot_owner_id"],
+      })),
+      properties: ["dealname", "amount", "closedate", "checked_by_coacs", "hubspot_owner_id"],
       limit: 100,
     }
     if (after) body.after = after
@@ -109,7 +115,7 @@ async function searchDeals(currency: string): Promise<Record<string, string>[]> 
       cache: "no-store",
     })
     const data = await res.json()
-    if (!res.ok) throw new Error(`Deals search (${currency}): ${JSON.stringify(data)}`)
+    if (!res.ok) throw new Error(`Deals search (${currencies}): ${JSON.stringify(data)}`)
 
     for (const r of (data.results ?? []) as Array<{ id: string; properties: Record<string, string> }>) {
       results.push({ ...r.properties, hs_object_id: r.id })
@@ -130,13 +136,14 @@ export async function GET(request: Request) {
   const config = REGIONS[region] ?? REGIONS.dk
 
   const [allDeals, owners, teamNames] = await Promise.all([
-    searchDeals(config.currency),
+    searchDeals(config.currencies),
     getOwners(),
     config.teamName ? getTeamOwnerNames(config.teamName) : Promise.resolve(null),
   ])
   const ownerFilter: string[] | null = config.hardcodedOwners ?? teamNames
 
-  type Cell = { amount: number; count: number }
+  type DealRef = { id: string; name: string; amount: number }
+  type Cell = { amount: number; count: number; deals: DealRef[] }
   const data: Record<string, Record<number, Record<number, Cell>>> = {}
   const ownerTotals: Record<string, number> = {}
 
@@ -161,9 +168,10 @@ export async function GET(request: Request) {
     const amount = parseFloat(d.amount) || 0
     if (!data[consultant]) data[consultant] = {}
     if (!data[consultant][year]) data[consultant][year] = {}
-    if (!data[consultant][year][month]) data[consultant][year][month] = { amount: 0, count: 0 }
+    if (!data[consultant][year][month]) data[consultant][year][month] = { amount: 0, count: 0, deals: [] }
     data[consultant][year][month].amount += amount
     data[consultant][year][month].count  += 1
+    data[consultant][year][month].deals.push({ id: d.hs_object_id, name: d.dealname || "Unknown Deal", amount })
     ownerTotals[consultant] = (ownerTotals[consultant] ?? 0) + amount
   }
 
