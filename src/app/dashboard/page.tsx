@@ -178,8 +178,17 @@ export default function Dashboard() {
   const [pipelineData, setPipelineData] = useState<any>(null)
   const [pipelineLoading, setPipelineLoading] = useState(false)
   const searchParams = useSearchParams()
-  const _regionParam = searchParams.get("region") ?? "dk"
-  const region = (["dk","se","ship","at","fi","no"].includes(_regionParam) ? _regionParam : "dk") as "dk"|"se"|"ship"|"at"|"fi"|"no"
+  const [region, setRegion] = useState<"dk"|"se"|"ship"|"at"|"fi"|"no">(() => {
+    if (typeof window === "undefined") return "dk"
+    const p = new URLSearchParams(window.location.search).get("region")
+    return (["dk","se","ship","at","fi","no"].includes(p ?? "") ? p : "dk") as "dk"|"se"|"ship"|"at"|"fi"|"no"
+  })
+  // Sync region state on client-side navigation (same route, different ?region=)
+  useEffect(() => {
+    const p = searchParams.get("region") ?? "dk"
+    const next = (["dk","se","ship","at","fi","no"].includes(p) ? p : "dk") as typeof region
+    if (next !== region) setRegion(next)
+  }, [searchParams])
   const [pipelineModal, setPipelineModal] = useState<{title: string, deals: any[], fmtAmt?: (n: number) => string} | null>(null)
   // YTD defaults — Jan 1 of current year → today
   const _ytdFrom = `${new Date().getFullYear()}-01-01`
@@ -394,12 +403,11 @@ export default function Dashboard() {
     const at   = ["vaekstkapital.at", "vaekstholdings.com", "vkfunddistribution.com"].includes(domain)
     const fi   = ["vaekstkapital.fi", "vkfunddistribution.com", "vaekstholdings.com"].includes(domain)
     const no   = ["vaekstkapital.no", "vkfunddistribution.com", "vaekstholdings.com"].includes(domain)
-    const current = searchParams.get("region") ?? "dk"
-    if (!dk && !se && ship && current !== "ship") router.replace("/dashboard?region=ship")
-    else if (!dk && !ship && se && current !== "se") router.replace("/dashboard?region=se")
-    else if (!dk && !se && !ship && at && current !== "at") router.replace("/dashboard?region=at")
-    else if (!dk && !se && !ship && !at && fi && current !== "fi") router.replace("/dashboard?region=fi")
-    else if (!dk && !se && !ship && !at && !fi && no && current !== "no") router.replace("/dashboard?region=no")
+    if (!dk && !se && ship) setRegion("ship")
+    else if (!dk && !ship && se) setRegion("se")
+    else if (!dk && !se && !ship && at) setRegion("at")
+    else if (!dk && !se && !ship && !at && fi) setRegion("fi")
+    else if (!dk && !se && !ship && !at && !fi && no) setRegion("no")
   }, [status, session])
 
   // SE closed deals (live, date-filtered)
