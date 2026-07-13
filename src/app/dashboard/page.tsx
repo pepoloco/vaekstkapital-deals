@@ -1,6 +1,6 @@
 "use client"
 // @ts-nocheck
-import { useEffect, useRef, useState } from "react"
+import { Suspense, useEffect, useRef, useState } from "react"
 import { useSession, signOut } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
 
@@ -159,7 +159,7 @@ function exportCSV(data: any) {
   a.click(); URL.revokeObjectURL(url)
 }
 
-export default function Dashboard() {
+function DashboardInner() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const [data, setData] = useState<any>(null)
@@ -3173,4 +3173,8 @@ export default function Dashboard() {
       )}
     </div>
   )
+}
+
+export default function Dashboard() {
+  return <Suspense><DashboardInner /></Suspense>
 }
