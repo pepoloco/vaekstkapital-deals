@@ -2,7 +2,7 @@
 // @ts-nocheck
 import { useEffect, useRef, useState } from "react"
 import { useSession, signOut } from "next-auth/react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 
 const fmt = (n: number) => new Intl.NumberFormat("da-DK", { style: "currency", currency: "DKK", maximumFractionDigits: 0 }).format(n)
 const fmtShort = (n: number) => n >= 1e6 ? (n/1e6).toFixed(1)+"M kr." : (n/1e3).toFixed(0)+"K kr."
@@ -177,11 +177,9 @@ export default function Dashboard() {
   const [tab, setTab] = useState<"deals"|"contact-pipeline">("deals")
   const [pipelineData, setPipelineData] = useState<any>(null)
   const [pipelineLoading, setPipelineLoading] = useState(false)
-  const [region, setRegion] = useState<"dk"|"se"|"ship"|"at"|"fi"|"no">(() => {
-    if (typeof window === "undefined") return "dk"
-    const p = new URLSearchParams(window.location.search).get("region")
-    return (["dk","se","ship","at","fi","no"].includes(p ?? "") ? p : "dk") as "dk"|"se"|"ship"|"at"|"fi"|"no"
-  })
+  const searchParams = useSearchParams()
+  const _regionParam = searchParams.get("region") ?? "dk"
+  const region = (["dk","se","ship","at","fi","no"].includes(_regionParam) ? _regionParam : "dk") as "dk"|"se"|"ship"|"at"|"fi"|"no"
   const [pipelineModal, setPipelineModal] = useState<{title: string, deals: any[], fmtAmt?: (n: number) => string} | null>(null)
   // YTD defaults — Jan 1 of current year → today
   const _ytdFrom = `${new Date().getFullYear()}-01-01`
@@ -396,11 +394,12 @@ export default function Dashboard() {
     const at   = ["vaekstkapital.at", "vaekstholdings.com", "vkfunddistribution.com"].includes(domain)
     const fi   = ["vaekstkapital.fi", "vkfunddistribution.com", "vaekstholdings.com"].includes(domain)
     const no   = ["vaekstkapital.no", "vkfunddistribution.com", "vaekstholdings.com"].includes(domain)
-    if (!dk && !se && ship) setRegion("ship")
-    else if (!dk && !ship && se) setRegion("se")
-    else if (!dk && !se && !ship && at) setRegion("at")
-    else if (!dk && !se && !ship && !at && fi) setRegion("fi")
-    else if (!dk && !se && !ship && !at && !fi && no) setRegion("no")
+    const current = searchParams.get("region") ?? "dk"
+    if (!dk && !se && ship && current !== "ship") router.replace("/dashboard?region=ship")
+    else if (!dk && !ship && se && current !== "se") router.replace("/dashboard?region=se")
+    else if (!dk && !se && !ship && at && current !== "at") router.replace("/dashboard?region=at")
+    else if (!dk && !se && !ship && !at && fi && current !== "fi") router.replace("/dashboard?region=fi")
+    else if (!dk && !se && !ship && !at && !fi && no && current !== "no") router.replace("/dashboard?region=no")
   }, [status, session])
 
   // SE closed deals (live, date-filtered)
