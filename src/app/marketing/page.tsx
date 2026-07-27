@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import type { MarketOverview, PlatformRow, CampaignRow as StaticCampaignRow } from '@/data/marketing-platform-data'
-import { PLATFORM_DATA_2025, PLATFORM_DATA_2026 } from '@/data/marketing-platform-data'
+import { PLATFORM_DATA_2026 } from '@/data/marketing-platform-data'
 
 const ALLOWED_DOMAINS = new Set(['vkfunddistribution.com', 'vaekstholdings.com'])
 
@@ -569,6 +569,9 @@ function LiveQuarterSection({ marketId, liveData }: { marketId: string; liveData
   const fmtDate = (d: string | null) =>
     d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
 
+  // Use sync timestamp as the end date (campaign hs_end_date may lag behind)
+  const syncedDate = liveData.generatedAt.slice(0, 10)
+
   function quarterKey(name: string): string {
     const m = name.match(/Q(\d)\s*(\d{4})/i)
     return m ? `Q${m[1]} ${m[2]}` : 'Other'
@@ -600,7 +603,7 @@ function LiveQuarterSection({ marketId, liveData }: { marketId: string; liveData
   const currency = allCampaigns[0].currency
   const isActiveAll = allCampaigns.some(c => c.status === 'Active')
   const startDateAll = allCampaigns.reduce<string | null>((b, c) => !b ? c.startDate : !c.startDate ? b : c.startDate < b ? c.startDate : b, null)
-  const endDateAll   = allCampaigns.reduce<string | null>((b, c) => !b ? c.endDate   : !c.endDate   ? b : c.endDate   > b ? c.endDate   : b, null)
+  const endDateAll   = syncedDate  // always show the sync date as the "up to" date
 
   return (
     <div style={{
@@ -725,17 +728,9 @@ function LiveQuarterSection({ marketId, liveData }: { marketId: string; liveData
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-type Year = '2025' | '2026'
-
-const YEAR_META: Record<Year, { label: string; range: string; data: MarketOverview[] }> = {
-  '2025': { label: '2025', range: '1 Jan 2025 – 31 Dec 2025', data: PLATFORM_DATA_2025 },
-  '2026': { label: '2026', range: '1 Jan 2026 – 10 Jun 2026', data: PLATFORM_DATA_2026 },
-}
-
 export default function MarketingDashboardPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const [year, setYear] = useState<Year>('2026')
 
   const [liveData, setLiveData] = useState<MarketingSyncResult | null>(null)
   const [liveLoading, setLiveLoading] = useState(true)
@@ -792,8 +787,6 @@ export default function MarketingDashboardPage() {
 
   if (!canAccess(session?.user?.email)) return null
 
-  const { range, data } = YEAR_META[year]
-
   return (
     <>
       <nav style={{
@@ -822,48 +815,19 @@ export default function MarketingDashboardPage() {
       <div style={{ background: T.bg, minHeight: 'calc(100vh - 54px)' }}>
         <main style={{ maxWidth: 1440, margin: '0 auto', padding: '28px 40px 60px' }}>
 
-          {/* Year tabs */}
+          {/* 2026 static report header */}
           <div style={{ marginBottom: 28 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 0, borderBottom: `2px solid ${T.border}` }}>
-              {(['2025', '2026'] as Year[]).map(y => {
-                const active = y === year
-                return (
-                  <button
-                    key={y}
-                    onClick={() => setYear(y)}
-                    style={{
-                      padding: '10px 24px',
-                      fontSize: 13,
-                      fontWeight: active ? 700 : 500,
-                      color: active ? T.teal : T.mid,
-                      background: 'none',
-                      border: 'none',
-                      borderBottom: active ? `2px solid ${T.teal}` : '2px solid transparent',
-                      marginBottom: -2,
-                      cursor: 'pointer',
-                      fontFamily: 'inherit',
-                      letterSpacing: '.01em',
-                      transition: 'color .15s',
-                    }}
-                  >
-                    {YEAR_META[y].label}
-                  </button>
-                )
-              })}
-            </div>
-            <p style={{ marginTop: 10, marginBottom: 0, fontSize: 12, color: T.muted }}>
-              {range}
-            </p>
+            <p style={{ margin: 0, fontSize: 12, color: T.muted }}>1 Jan 2026 – present</p>
           </div>
 
-          {year === '2025' && data.map(market =>
+          {PLATFORM_DATA_2026.map(market =>
             market.campaigns
-              ? <CampaignBreakdownTable key={`${year}-${market.id}`} data={market} />
-              : <MarketTable           key={`${year}-${market.id}`} data={market} />
+              ? <CampaignBreakdownTable key={`2026-${market.id}`} data={market} />
+              : <MarketTable           key={`2026-${market.id}`} data={market} />
           )}
 
-          {/* ── Live HubSpot sync — 2026 only (Contacts/Deals/Value only — Spend manual, Grade D+ unavailable) ── */}
-          {year === '2026' && <>
+          {/* ── Live HubSpot sync ── */}
+          {<>
           <div style={{ marginTop: 44, marginBottom: 16, paddingTop: 28, borderTop: `2px solid ${T.border}` }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
               <div>
@@ -918,6 +882,7 @@ export default function MarketingDashboardPage() {
           {liveData && <LiveQuarterSection marketId="at" liveData={liveData} />}
           </>}
         </main>
+
       </div>
     </>
   )
