@@ -2297,6 +2297,147 @@ function DashboardInner() {
           </div>
         )}
 
+        {/* ── Distribution Charts ── */}
+        {(() => {
+          if (shipWonF.length === 0) return null
+          const byOwner: Record<string, { count: number; amount: number }> = {}
+          for (const d of shipWonF) {
+            const owner = d.owner || "Unknown"
+            if (!byOwner[owner]) byOwner[owner] = { count: 0, amount: 0 }
+            byOwner[owner].count  += 1
+            byOwner[owner].amount += d.amount
+          }
+          const sorted   = Object.entries(byOwner).sort((a, b) => b[1].amount - a[1].amount)
+          const maxAmt   = sorted[0][1].amount
+          const totalAmt = sorted.reduce((s, [, v]) => s + v.amount, 0)
+          const totalCnt = shipWonF.length
+          const DIST_COLORS = ["#5a4998","#1d4ed8","#065f46","#92400e","#be123c","#0369a1","#3730a3","#c2410c","#0f766e"]
+
+          // Stacked share bar segments
+          const segments = sorted.map(([owner, { amount }], i) => ({
+            owner,
+            pct: amount / totalAmt * 100,
+            clr: DIST_COLORS[i % DIST_COLORS.length],
+          }))
+
+          return (
+            <div style={{marginTop:32}}>
+              <div style={{padding:"10px 0 10px",borderTop:"2px solid var(--pur)",display:"flex",alignItems:"baseline",gap:10}}>
+                <span style={{fontSize:11,fontWeight:700,letterSpacing:".06em",textTransform:"uppercase",color:"var(--pur)"}}>Distribution by Consultant</span>
+                <span style={{fontSize:10,color:"var(--ink3)"}}>Closed Won · {totalCnt} deals · {fmtShortUSD(totalAmt)} total</span>
+              </div>
+
+              {/* Stacked share bar */}
+              <div style={{marginBottom:16}}>
+                <div style={{display:"flex",height:14,borderRadius:7,overflow:"hidden",gap:1}}>
+                  {segments.map(s => (
+                    <div key={s.owner} title={`${s.owner}: ${s.pct.toFixed(1)}%`}
+                      style={{width:`${s.pct}%`,background:s.clr,minWidth:2,flexShrink:0}} />
+                  ))}
+                </div>
+                {/* Legend */}
+                <div style={{display:"flex",flexWrap:"wrap",gap:"6px 16px",marginTop:8}}>
+                  {segments.map(s => (
+                    <span key={s.owner} style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:"var(--ink3)"}}>
+                      <span style={{width:8,height:8,borderRadius:2,background:s.clr,display:"inline-block",flexShrink:0}} />
+                      {s.owner} <span style={{fontWeight:600,color:"var(--ink2)"}}>{s.pct.toFixed(0)}%</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Leaderboard table */}
+              <div style={{background:"var(--card)",border:"1px solid var(--bdr)",borderRadius:8,overflow:"hidden"}}>
+                {/* Column headers */}
+                <div style={{display:"grid",gridTemplateColumns:"32px 1fr 220px 90px 100px 110px",gap:0,
+                  padding:"7px 16px",background:"var(--bg)",borderBottom:"1px solid var(--bdr)",
+                  fontSize:10,fontWeight:700,letterSpacing:".06em",textTransform:"uppercase",color:"var(--ink3)"}}>
+                  <span>#</span>
+                  <span>Consultant</span>
+                  <span style={{textAlign:"left",paddingLeft:4}}>Value (USD)</span>
+                  <span style={{textAlign:"right"}}>Deals</span>
+                  <span style={{textAlign:"right"}}>Avg size</span>
+                  <span style={{textAlign:"right"}}>Share</span>
+                </div>
+
+                {sorted.map(([owner, { count, amount }], i) => {
+                  const clr    = DIST_COLORS[i % DIST_COLORS.length]
+                  const clrBg  = clr + "18"
+                  const valPct = Math.round(amount / maxAmt * 100)
+                  const avg    = Math.round(amount / count)
+                  const share  = (amount / totalAmt * 100).toFixed(1)
+                  return (
+                    <div key={owner} style={{
+                      display:"grid", gridTemplateColumns:"32px 1fr 220px 90px 100px 110px",
+                      gap:0, padding:"11px 16px", alignItems:"center",
+                      borderBottom:"1px solid var(--bdr)",
+                      borderLeft:`3px solid ${clr}`,
+                    }}>
+                      {/* Rank */}
+                      <span style={{fontSize:11,fontWeight:800,color:clr}}>#{i+1}</span>
+
+                      {/* Name */}
+                      <span style={{fontSize:13,fontWeight:600,color:"var(--ink1)"}}>{owner}</span>
+
+                      {/* Value bar */}
+                      <div style={{paddingLeft:4}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <div style={{flex:1,height:8,background:"var(--bdr)",borderRadius:4,overflow:"hidden"}}>
+                            <div style={{height:"100%",width:`${valPct}%`,background:clr,borderRadius:4}} />
+                          </div>
+                          <span style={{fontSize:12,fontWeight:700,color:clr,minWidth:60,textAlign:"right",whiteSpace:"nowrap"}}>
+                            {fmtShortUSD(amount)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Count */}
+                      <div style={{textAlign:"right"}}>
+                        <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",
+                          minWidth:26,height:22,borderRadius:11,background:clrBg,
+                          fontSize:12,fontWeight:700,color:clr,padding:"0 8px"}}>
+                          {count}
+                        </span>
+                      </div>
+
+                      {/* Avg */}
+                      <span style={{fontSize:12,fontWeight:600,color:"var(--ink2)",textAlign:"right"}}>
+                        {fmtShortUSD(avg)}
+                      </span>
+
+                      {/* Share pill */}
+                      <div style={{textAlign:"right"}}>
+                        <span style={{display:"inline-block",padding:"2px 9px",borderRadius:10,
+                          background:clrBg,fontSize:11,fontWeight:700,color:clr}}>
+                          {share}%
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+
+                {/* Total row */}
+                <div style={{display:"grid",gridTemplateColumns:"32px 1fr 220px 90px 100px 110px",
+                  gap:0,padding:"10px 16px",background:"var(--bg)",alignItems:"center",
+                  borderTop:"2px solid var(--bdr)"}}>
+                  <span />
+                  <span style={{fontSize:12,fontWeight:700,color:"var(--ink1)",letterSpacing:".03em"}}>Total</span>
+                  <div style={{paddingLeft:4}}>
+                    <span style={{fontSize:13,fontWeight:800,color:"var(--pur)"}}>{fmtShortUSD(totalAmt)}</span>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <span style={{fontSize:13,fontWeight:800,color:"var(--pur)"}}>{totalCnt}</span>
+                  </div>
+                  <span style={{fontSize:12,fontWeight:600,color:"var(--ink2)",textAlign:"right"}}>
+                    {fmtShortUSD(Math.round(totalAmt / totalCnt))}
+                  </span>
+                  <span style={{fontSize:12,fontWeight:700,color:"var(--ink3)",textAlign:"right"}}>100%</span>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
+
         <div style={{marginTop:32,padding:"10px 0 6px",borderTop:"2px solid var(--grn)"}}>
           <span style={{fontSize:11,fontWeight:700,letterSpacing:".06em",textTransform:"uppercase",color:"var(--grn)"}}>Pipeline Report · Team Shipping</span>
           <span style={{fontSize:10,color:"var(--ink3)",marginLeft:8}}>BU Ship pipelines · {new Date().getFullYear()} YTD</span>
