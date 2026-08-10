@@ -2307,6 +2307,21 @@ function DashboardInner() {
             byOwner[owner].count  += 1
             byOwner[owner].amount += d.amount
           }
+          // Merge partial names into full names (e.g. "Bendik" → "Bendik Steiro")
+          for (const shortKey of Object.keys(byOwner)) {
+            if (!byOwner[shortKey]) continue
+            const shortW = shortKey.toLowerCase().split(/\s+/)
+            for (const longKey of Object.keys(byOwner)) {
+              if (longKey === shortKey || !byOwner[longKey]) continue
+              const longW = longKey.toLowerCase().split(/\s+/)
+              if (shortW.length < longW.length && shortW.every(w => longW.includes(w))) {
+                byOwner[longKey].count  += byOwner[shortKey].count
+                byOwner[longKey].amount += byOwner[shortKey].amount
+                delete byOwner[shortKey]
+                break
+              }
+            }
+          }
           const sorted   = Object.entries(byOwner).sort((a, b) => b[1].amount - a[1].amount)
           const maxAmt   = sorted[0][1].amount
           const totalAmt = sorted.reduce((s, [, v]) => s + v.amount, 0)
