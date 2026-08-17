@@ -14,6 +14,7 @@ const canAccess = (email?: string | null) =>
 
 const BASE = "https://api.hubapi.com"
 const KEY = process.env.HUBSPOT_API_KEY!
+const SHIP_KEY = process.env.HUBSPOT_API_KEY_SHIPPING!
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 const YEARS = [2024, 2025, 2026]
@@ -68,13 +69,13 @@ function fuzzyMatch(ownerName: string, targets: string[]): string | null {
   return null
 }
 
-async function getOwners(): Promise<Record<string, string>> {
+async function getOwners(key = KEY): Promise<Record<string, string>> {
   const byId: Record<string, string> = {}
   let after: string | undefined
   do {
     await sleep(150)
     const url = `${BASE}/crm/v3/owners?limit=100${after ? `&after=${after}` : ""}`
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${KEY}` }, cache: "no-store" })
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${key}` }, cache: "no-store" })
     const data = await res.json()
     for (const o of (data.results ?? []) as Array<{ id: string; firstName: string; lastName: string }>) {
       const name = [o.firstName, o.lastName].filter(Boolean).join(" ")
@@ -85,7 +86,7 @@ async function getOwners(): Promise<Record<string, string>> {
   return byId
 }
 
-async function searchDeals(currencies: string[]): Promise<Record<string, string>[]> {
+async function searchDeals(currencies: string[], key = KEY): Promise<Record<string, string>[]> {
   const results: Record<string, string>[] = []
   let after: string | undefined
   const startMs = new Date("2024-01-01").getTime()
@@ -110,7 +111,7 @@ async function searchDeals(currencies: string[]): Promise<Record<string, string>
 
     const res = await fetch(`${BASE}/crm/v3/objects/deals/search`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify(body),
       cache: "no-store",
     })
@@ -135,9 +136,10 @@ export async function GET(request: Request) {
   const region = (url.searchParams.get("region") ?? "dk").toLowerCase()
   const config = REGIONS[region] ?? REGIONS.dk
 
+  const apiKey = region === "shipping" ? SHIP_KEY : KEY
   const [allDeals, owners, teamNames] = await Promise.all([
-    searchDeals(config.currencies),
-    getOwners(),
+    searchDeals(config.currencies, apiKey),
+    getOwners(apiKey),
     config.teamName ? getTeamOwnerNames(config.teamName) : Promise.resolve(null),
   ])
   const ownerFilter: string[] | null = config.hardcodedOwners ?? teamNames

@@ -1,5 +1,6 @@
 const BASE = "https://api.hubapi.com"
 const KEY = process.env.HUBSPOT_API_KEY!
+const SHIP_KEY = process.env.HUBSPOT_API_KEY_SHIPPING!
 
 const DK_WON = [
   "497565675",  // BU DK - VK Mortgage Fund
@@ -56,17 +57,17 @@ function isTestDeal(dealname: string | null | undefined): boolean {
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-async function hsPost(path: string, body: object, attempt = 0): Promise<Record<string, unknown>> {
+async function hsPost(path: string, body: object, attempt = 0, key = KEY): Promise<Record<string, unknown>> {
   await sleep(300)
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
     cache: "no-store",
   })
   if (res.status === 429 && attempt < 5) {
     await sleep(2000 * (attempt + 1))
-    return hsPost(path, body, attempt + 1)
+    return hsPost(path, body, attempt + 1, key)
   }
   const data = await res.json()
   if (!res.ok) throw new Error(`HubSpot ${path} ${res.status}: ${JSON.stringify(data)}`)
@@ -80,13 +81,13 @@ async function countObjects(objectType: string, filterGroups: object[]): Promise
   return (data.total as number) ?? 0
 }
 
-async function searchAll(objectType: string, filterGroups: object[], properties: string[]): Promise<Record<string, string>[]> {
+async function searchAll(objectType: string, filterGroups: object[], properties: string[], key = KEY): Promise<Record<string, string>[]> {
   const results: Record<string, string>[] = []
   let after: string | undefined
   do {
     const body: Record<string, unknown> = { filterGroups, properties, limit: 200 }
     if (after) body.after = after
-    const data = await hsPost(`/crm/v3/objects/${objectType}/search`, body)
+    const data = await hsPost(`/crm/v3/objects/${objectType}/search`, body, 0, key)
     const rows = data.results as Array<{ properties: Record<string, string> }>
     if (!rows) throw new Error(`No results in ${objectType}: ${JSON.stringify(data)}`)
     results.push(...rows.map(r => r.properties))
@@ -95,13 +96,13 @@ async function searchAll(objectType: string, filterGroups: object[], properties:
   return results
 }
 
-async function getOwners(): Promise<{ byId: Record<string, string>; byUserId: Record<string, string> }> {
+async function getOwners(key = KEY): Promise<{ byId: Record<string, string>; byUserId: Record<string, string> }> {
   const byId: Record<string, string> = {}
   const byUserId: Record<string, string> = {}
   let after: string | undefined
   do {
     const url = `${BASE}/crm/v3/owners?limit=100${after ? `&after=${after}` : ""}`
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${KEY}` }, cache: "no-store" })
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${key}` }, cache: "no-store" })
     const data = await res.json()
     for (const o of data.results ?? []) {
       const name = [o.firstName, o.lastName].filter(Boolean).join(" ")
@@ -163,10 +164,10 @@ const PIPELINE_NAMES_FALLBACK: Record<string, string> = {
   "3391038697": "SRD LandHoldings A/S",
 }
 
-async function getDealPipelines(): Promise<Record<string, string>> {
+async function getDealPipelines(key = KEY): Promise<Record<string, string>> {
   try {
     const res = await fetch(`${BASE}/crm/v3/pipelines/deals`, {
-      headers: { Authorization: `Bearer ${KEY}` },
+      headers: { Authorization: `Bearer ${key}` },
       cache: "no-store",
     })
     const data = await res.json()
@@ -559,10 +560,8 @@ export async function fetchClosedDeals(from: string, to: string) {
   const byClose = (a: Record<string, string>, b: Record<string, string>) =>
     new Date(b.closedate || "").getTime() - new Date(a.closedate || "").getTime()
 
-  const [wonResults, lostResults] = await Promise.all([
-    Promise.all(DK_WON.map(id => searchAll("deals", [makeFilter(id)], CLOSED_PROPS))),
-    Promise.all(DK_LOST.map(id => searchAll("deals", [makeFilter(id)], CLOSED_PROPS))),
-  ])
+  const wonResults  = await Promise.all(DK_WON.map(id  => searchAll("deals", [makeFilter(id)], CLOSED_PROPS)))
+  const lostResults = await Promise.all(DK_LOST.map(id => searchAll("deals", [makeFilter(id)], CLOSED_PROPS)))
 
   return {
     won: wonResults.flat()
@@ -578,12 +577,12 @@ export async function fetchClosedDeals(from: string, to: string) {
 
 // Generic pipeline discovery — filters pipelines whose label contains labelMatch.
 // Won deals are identified via hs_is_closed_won so stage label naming doesn't matter.
-async function getPipelineData(labelMatch: string): Promise<{
+async function getPipelineData(labelMatch: string, key = KEY): Promise<{
   pipelineIds: string[]; LOST: string[]; OPEN: string[]; NEGOTIATIONS: string[];
 }> {
   try {
     const res = await fetch(`${BASE}/crm/v3/pipelines/deals`, {
-      headers: { Authorization: `Bearer ${KEY}` },
+      headers: { Authorization: `Bearer ${key}` },
       cache: "no-store",
     })
     const data = await res.json()
@@ -611,9 +610,9 @@ const REGION_PROPS = [
   "closedate", "createdate", "dealname", "hs_object_id", "signed_via",
 ]
 
-async function fetchRegionClosedDeals(labelMatch: string, from: string, to: string) {
+async function fetchRegionClosedDeals(labelMatch: string, from: string, to: string, key = KEY) {
   const [{ byId: owners }, PIPELINE_NAMES, { pipelineIds, LOST }] = await Promise.all([
-    getOwners(), getDealPipelines(), getPipelineData(labelMatch),
+    getOwners(key), getDealPipelines(key), getPipelineData(labelMatch, key),
   ])
 
   const wonFilter = (pipelineId: string) => {
@@ -651,8 +650,8 @@ async function fetchRegionClosedDeals(labelMatch: string, from: string, to: stri
     new Date(b.closedate || "").getTime() - new Date(a.closedate || "").getTime()
 
   const [wonResults, lostResults] = await Promise.all([
-    pipelineIds.length > 0 ? Promise.all(pipelineIds.map(id => searchAll("deals", [wonFilter(id)],  REGION_PROPS))) : Promise.resolve([]),
-    LOST.length > 0        ? Promise.all(LOST.map(id        => searchAll("deals", [lostFilter(id)], REGION_PROPS))) : Promise.resolve([]),
+    pipelineIds.length > 0 ? Promise.all(pipelineIds.map(id => searchAll("deals", [wonFilter(id)],  REGION_PROPS, key))) : Promise.resolve([]),
+    LOST.length > 0        ? Promise.all(LOST.map(id        => searchAll("deals", [lostFilter(id)], REGION_PROPS, key))) : Promise.resolve([]),
   ])
 
   return {
@@ -661,9 +660,9 @@ async function fetchRegionClosedDeals(labelMatch: string, from: string, to: stri
   }
 }
 
-async function fetchRegionOpenDeals(labelMatch: string) {
+async function fetchRegionOpenDeals(labelMatch: string, key = KEY) {
   const [{ byId: owners }, PIPELINE_NAMES, { pipelineIds, LOST, OPEN, NEGOTIATIONS }] = await Promise.all([
-    getOwners(), getDealPipelines(), getPipelineData(labelMatch),
+    getOwners(key), getDealPipelines(key), getPipelineData(labelMatch, key),
   ])
 
   const ytdStart = `${new Date().getFullYear()}-01-01`
@@ -693,12 +692,10 @@ async function fetchRegionOpenDeals(labelMatch: string) {
   const clean = (rows: Record<string, string>[], lbl: string) =>
     rows.filter(d => !isTestDeal(d.dealname)).sort(byCreate).map(d => mapDeal(d, lbl))
 
-  const [negResults, subResults, wonResults, lostResults] = await Promise.all([
-    NEGOTIATIONS.length > 0 ? Promise.all(NEGOTIATIONS.map(id => searchAll("deals", [openFilter(id)], REGION_PROPS))) : Promise.resolve([]),
-    OPEN.length > 0         ? Promise.all(OPEN.map(id         => searchAll("deals", [openFilter(id)], REGION_PROPS))) : Promise.resolve([]),
-    pipelineIds.length > 0  ? Promise.all(pipelineIds.map(id  => searchAll("deals", [wonFilter(id)],  REGION_PROPS))) : Promise.resolve([]),
-    LOST.length > 0         ? Promise.all(LOST.map(id         => searchAll("deals", [lostFilter(id)], REGION_PROPS))) : Promise.resolve([]),
-  ])
+  const negResults  = NEGOTIATIONS.length > 0 ? await Promise.all(NEGOTIATIONS.map(id => searchAll("deals", [openFilter(id)], REGION_PROPS, key))) : []
+  const subResults  = OPEN.length > 0         ? await Promise.all(OPEN.map(id         => searchAll("deals", [openFilter(id)], REGION_PROPS, key))) : []
+  const wonResults  = pipelineIds.length > 0  ? await Promise.all(pipelineIds.map(id  => searchAll("deals", [wonFilter(id)],  REGION_PROPS, key))) : []
+  const lostResults = LOST.length > 0         ? await Promise.all(LOST.map(id         => searchAll("deals", [lostFilter(id)], REGION_PROPS, key))) : []
 
   return {
     negotiations:         clean(negResults.flat(),  "Negotiations"),
@@ -710,8 +707,8 @@ async function fetchRegionOpenDeals(labelMatch: string) {
 
 export const fetchSEClosedDeals   = (from: string, to: string) => fetchRegionClosedDeals("BU SE",   from, to)
 export const fetchSEOpenDeals     = ()                          => fetchRegionOpenDeals("BU SE")
-export const fetchShipClosedDeals = (from: string, to: string) => fetchRegionClosedDeals("BU SHIP", from, to)
-export const fetchShipOpenDeals   = ()                          => fetchRegionOpenDeals("BU SHIP")
+export const fetchShipClosedDeals = (from: string, to: string) => fetchRegionClosedDeals("BU SHIP", from, to, SHIP_KEY)
+export const fetchShipOpenDeals   = ()                          => fetchRegionOpenDeals("BU SHIP", SHIP_KEY)
 export const fetchATClosedDeals   = (from: string, to: string) => fetchRegionClosedDeals("BU AT",   from, to)
 export const fetchATOpenDeals     = ()                          => fetchRegionOpenDeals("BU AT")
 export const fetchFIClosedDeals   = (from: string, to: string) => fetchRegionClosedDeals("BU FI",   from, to)
@@ -767,12 +764,12 @@ export async function fetchOpenDeals() {
     ],
   })
 
-  const [negResults, subResults, wonResults, lostResults] = await Promise.all([
-    Promise.all(DK_NEGOTIATIONS.map(id => searchAll("deals", [openFilter(id)],   PIPELINE_PROPS))),
-    Promise.all(DK_OPEN.map(id         => searchAll("deals", [openFilter(id)],   PIPELINE_PROPS))),
-    Promise.all(DK_WON.map(id          => searchAll("deals", [closedFilter(id)], PIPELINE_PROPS))),
-    Promise.all(DK_LOST.map(id         => searchAll("deals", [closedFilter(id)], PIPELINE_PROPS))),
-  ])
+  // Process each group sequentially to avoid overwhelming HubSpot's per-second rate limit
+  // (24 concurrent requests at once saturates the CRM Search API quota)
+  const negResults  = await Promise.all(DK_NEGOTIATIONS.map(id => searchAll("deals", [openFilter(id)],   PIPELINE_PROPS)))
+  const subResults  = await Promise.all(DK_OPEN.map(id         => searchAll("deals", [openFilter(id)],   PIPELINE_PROPS)))
+  const wonResults  = await Promise.all(DK_WON.map(id          => searchAll("deals", [closedFilter(id)], PIPELINE_PROPS)))
+  const lostResults = await Promise.all(DK_LOST.map(id         => searchAll("deals", [closedFilter(id)], PIPELINE_PROPS)))
 
   const clean = (rows: Record<string, string>[]) =>
     rows.filter(d => !isTestDeal(d.dealname)).sort(byCreate).map(mapDeal)

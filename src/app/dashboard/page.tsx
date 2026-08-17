@@ -22,6 +22,7 @@ const MONTH_LABELS: Record<string,string> = {
   "2026-09":"Sep 26","2026-10":"Okt 26","2026-11":"Nov 26","2026-12":"Dec 26",
 }
 const PORTAL = "144061788"
+const SHIP_PORTAL = "147337911"
 
 const C = {
   G: "#15624c", Gd: "rgba(21,97,76,.12)",
@@ -1055,7 +1056,7 @@ function DashboardInner() {
   const selStyle = {fontSize:12,padding:"6px 10px",border:"1px solid var(--bdr)",borderRadius:4,fontFamily:"inherit",color:"var(--ink2)",background:"#fff",cursor:"pointer"}
   const lblStyle = {fontSize:11,fontWeight:700,letterSpacing:".07em",textTransform:"uppercase" as const,color:"var(--ink3)",marginBottom:2}
 
-  const vnDealTable = (rows: any[], color: string, dateMode: "created" | "closed" = "created", showSignedVia = false, fmtAmt = fmt) => (
+  const vnDealTable = (rows: any[], color: string, dateMode: "created" | "closed" = "created", showSignedVia = false, fmtAmt = fmt, portal = PORTAL) => (
     <div style={{overflowY:"auto",maxHeight:"480px"}}>
       <table style={{width:"100%",borderCollapse:"collapse"}}>
         <thead style={{position:"sticky",top:0,background:"var(--bei)",zIndex:1}}>
@@ -1071,7 +1072,7 @@ function DashboardInner() {
         <tbody>{rows.length > 0 ? rows.map((d: any, i: number) => (
           <tr key={d.id}>
             <td style={td}><span className="rank">{i+1}</span></td>
-            <td style={td}><a href={`https://app-eu1.hubspot.com/contacts/${PORTAL}/record/0-3/${d.id}`} target="_blank" rel="noreferrer" style={{color,textDecoration:"none",fontWeight:500}}>{d.name}</a></td>
+            <td style={td}><a href={`https://app-eu1.hubspot.com/contacts/${portal}/record/0-3/${d.id}`} target="_blank" rel="noreferrer" style={{color,textDecoration:"none",fontWeight:500}}>{d.name}</a></td>
             <td style={{...td,fontSize:11}}>
               {d.subscriptionStatus !== "—" ? <span style={{fontSize:9,fontWeight:600,letterSpacing:".06em",textTransform:"uppercase",padding:"2px 6px",borderRadius:3,background:"rgba(90,73,152,.1)",color:"var(--pur)"}}>{d.subscriptionStatus}</span> : <span style={{color:"var(--ink3)"}}>—</span>}
             </td>
@@ -2285,7 +2286,7 @@ function DashboardInner() {
             </span>
             <span className="tcard-sub">{shipWonF.length} deals · {fmtUSD(shipWonF.reduce((s: number,d: any) => s+d.amount,0))}</span>
           </div>
-          {vnDealTable(shipWonF, "var(--pur)", shipIsOpenStage ? "created" : "closed", false, fmtUSD)}
+          {vnDealTable(shipWonF, "var(--pur)", shipIsOpenStage ? "created" : "closed", false, fmtUSD, SHIP_PORTAL)}
         </div>
         {!shipIsOpenStage && (
           <div className="tcard" style={{marginTop:8}}>
@@ -2293,7 +2294,7 @@ function DashboardInner() {
               <span className="tcard-title">All Deals Closed Lost · Ship · {(shipC1From || shipC1To) ? `${shipC1From || "..."} — ${shipC1To || "..."}` : `${new Date().getFullYear()} YTD`}</span>
               <span className="tcard-sub">{shipLostF.length} deals · {fmtUSD(shipLostF.reduce((s: number,d: any) => s+d.amount,0))}</span>
             </div>
-            {vnDealTable(shipLostF, "var(--gld)", "closed", false, fmtUSD)}
+            {vnDealTable(shipLostF, "var(--gld)", "closed", false, fmtUSD, SHIP_PORTAL)}
           </div>
         )}
 
@@ -2575,7 +2576,7 @@ function DashboardInner() {
                         <td colSpan={4} style={{padding:"8px 16px 12px",background:"var(--bei)",borderBottom:"1px solid var(--bdr)"}}>
                           <div style={{display:"flex",flexDirection:"column",gap:4}}>
                             {f.dealList?.sort((a: any,b: any) => b.amount - a.amount).map((d: any) => (
-                              <a key={d.id} href={`https://app-eu1.hubspot.com/contacts/${PORTAL}/record/0-3/${d.id}`} target="_blank" rel="noreferrer"
+                              <a key={d.id} href={`https://app-eu1.hubspot.com/contacts/${SHIP_PORTAL}/record/0-3/${d.id}`} target="_blank" rel="noreferrer"
                                 style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 10px",background:"#fff",borderRadius:4,border:"1px solid var(--bdr)",textDecoration:"none",fontSize:11,color:"var(--ink2)"}}>
                                 <span style={{flex:1}}>{d.name}</span>
                                 <span style={{color:"var(--ink3)",fontSize:10,marginRight:12}}>{d.owner || "—"}</span>

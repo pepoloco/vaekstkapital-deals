@@ -115,13 +115,12 @@ function FlagImg({ src, label }: { src: string; label: string }) {
   )
 }
 
-const HS_PORTAL = "144061788"
-
-function DealPopover({ deals, currency, x, y, onClose }: {
+function DealPopover({ deals, currency, x, y, onClose, portal = "144061788" }: {
   deals: DealRef[]
   currency: string
   x: number
   y: number
+  portal?: string
   onClose: () => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -151,7 +150,7 @@ function DealPopover({ deals, currency, x, y, onClose }: {
       </div>
       {deals.map((d, i) => (
         <a key={d.id}
-          href={`https://app-eu1.hubspot.com/contacts/${HS_PORTAL}/deal/${d.id}`}
+          href={`https://app-eu1.hubspot.com/contacts/${portal}/deal/${d.id}`}
           target="_blank" rel="noopener noreferrer"
           style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
             padding: "9px 14px", textDecoration: "none", color: "inherit",
@@ -201,6 +200,7 @@ function SalesTable({ report }: { report: ReportData }) {
           x={popover.x}
           y={popover.y}
           onClose={() => setPopover(null)}
+          portal={region === "shipping" ? "147337911" : "144061788"}
         />
       )}
       <div style={{ overflowX: "auto" }}>
