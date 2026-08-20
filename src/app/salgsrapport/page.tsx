@@ -3,25 +3,18 @@
 import { useEffect, useRef, useState } from "react"
 import { useSession, signOut } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import { getAccess as resolveAccess, salesReportRegions } from "@/lib/access"
 
-const ADMIN_DOMAINS = ["vaekstholdings.com", "vkfunddistribution.com"]
-const ADMIN_EMAILS = new Set(["tlm@vaekstnet.com"])
-const isAdmin = (email?: string | null) =>
-  !!email && (ADMIN_DOMAINS.includes(email?.split("@")[1]?.toLowerCase() ?? "") || ADMIN_EMAILS.has(email.toLowerCase()))
+// Rules from src/lib/access.ts — same module /api/salgsrapport* enforces.
+// UX only; the API checks independently.
+const isAdmin = (email?: string | null) => resolveAccess(email).isAdmin
 
-// Non-admin emails granted Sales Report access, mapped to the regions they can see
-const SALES_REPORT_EXCEPTIONS: Record<string, string[]> = {
-  "sok@vaekstkapital.dk": ["dk"],
-}
+const canViewSalesReport = (email?: string | null) => resolveAccess(email).canSalesReport
 
-const canViewSalesReport = (email?: string | null) =>
-  !!email && (isAdmin(email) || email.toLowerCase() in SALES_REPORT_EXCEPTIONS)
-
-const allowedRegions = (email?: string | null): string[] | null => {
-  if (!email) return null
-  if (isAdmin(email)) return null // null = all regions
-  return SALES_REPORT_EXCEPTIONS[email.toLowerCase()] ?? null
-}
+// null = all regions. Previously an unknown non-admin also got null (= all);
+// salesReportRegions() returns [] for them instead.
+const allowedRegions = (email?: string | null): string[] | null =>
+  salesReportRegions(resolveAccess(email))
 
 const YEARS = [2024, 2025, 2026]
 const MONTHS = [

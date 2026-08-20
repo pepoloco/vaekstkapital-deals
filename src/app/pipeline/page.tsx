@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react"
 import { useSession, signOut } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import { getAccess as resolveAccess, REGION_TO_BRAND, type Region } from "@/lib/access"
 
 const PORTAL = "144061788"
 const BG = "#F5F2EC", NAV = "#1a1a2e", INK = "#1a1a2e", MUTED = "#6b7280", BORDER = "#e5e0d8"
@@ -91,19 +92,8 @@ const BRAND_LABELS: Record<string, string> = {
   "17065112": "Finland",
   "17435297": "Norway",
 }
-const REGION_TO_BRAND: Record<string, string> = {
-  dk: "0", se: "17424990", ship: "17893427", at: "18387361", fi: "17065112", no: "17435297"
-}
-
-const PIPELINE_ALLOWED_EMAILS = new Set(["brj@vaekstkapital.dk","tnp@vaekstkapital.dk","sok@vaekstkapital.dk","aro@vaekstkapital.dk","sts@vaekstkapital.dk","spo@vaekstkapital.se","acs@vaekstkapital.se","nry@vaekstkapital.se"])
-const ADMIN_DOMAINS = new Set(["vkfunddistribution.com","vaekstholdings.com"])
-const ADMIN_EMAILS = new Set(["tlm@vaekstnet.com"])
-// Non-admin domains that have pipeline access → locked to their own brand
-const DOMAIN_TO_BRAND: Record<string, string> = {
-  "vaekstkapital.dk": "0",
-  "vaekstkapital.se": "17424990",
-  "vaekstkapital.at": "18387361",
-}
+// Access rules come from src/lib/access.ts — the same module /api/pipeline-data
+// and /api/pipeline-sync enforce. UX only; the API checks independently.
 
 export default function PipelinePage() {
   const { data: session, status } = useSession()
@@ -121,21 +111,22 @@ export default function PipelinePage() {
   useEffect(() => {
     if (status === "unauthenticated") { router.push("/login"); return }
     if (status === "authenticated") {
-      const email = session?.user?.email?.toLowerCase() ?? ""
-      const domain = email.split("@")[1] ?? ""
-      const allowed = ADMIN_DOMAINS.has(domain) || ADMIN_EMAILS.has(email) || domain === "vaekstkapital.at" || PIPELINE_ALLOWED_EMAILS.has(email)
-      if (!allowed) { router.push("/"); return }
-      const admin = ADMIN_DOMAINS.has(domain) || ADMIN_EMAILS.has(email)
-      setIsAdmin(admin)
-      if (!admin) {
-        // Non-admins locked to their own brand
-        const lockedBrand = DOMAIN_TO_BRAND[domain]
-        setBrandId(lockedBrand ?? "0")
+      const a = resolveAccess(session?.user?.email)
+      if (!a.canPipeline) { router.push("/"); return }
+      setIsAdmin(a.isAdmin)
+      if (!a.isAdmin) {
+        // Scoped users are locked to their own brand. Previously this fell back
+        // to "0" (Denmark) for any domain missing from the map — so a scoped
+        // user without a brand would have been shown Danish data. Now a user
+        // with no region gets nothing and is sent back to the hub.
+        const own = a.region ? REGION_TO_BRAND[a.region] : null
+        if (!own) { router.push("/"); return }
+        setBrandId(own)
       } else {
         // Admins: use URL param brand if present, otherwise Denmark
         const params = new URLSearchParams(window.location.search)
-        const region = params.get("region")
-        const urlBrand = params.get("brand") ?? (region ? REGION_TO_BRAND[region] : null)
+        const region = params.get("region") as Region | null
+        const urlBrand = params.get("brand") ?? (region ? REGION_TO_BRAND[region] ?? null : null)
         setBrandId(urlBrand ?? "0")
       }
     }

@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from "react"
 import { useSession, signOut } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { getAccess as resolveAccess, canReadRegion } from "@/lib/access"
 
 const fmt = (n: number) => new Intl.NumberFormat("da-DK", { style: "currency", currency: "DKK", maximumFractionDigits: 0 }).format(n)
 const fmtShort = (n: number) => n >= 1e6 ? (n/1e6).toFixed(1)+"M kr." : (n/1e3).toFixed(0)+"K kr."
@@ -313,14 +314,18 @@ function DashboardInner() {
   }, [])
   useEffect(() => {
     if (status !== "authenticated") return
+    // /api/open-deals is Denmark-scoped and now returns 403 for non-DK users,
+    // so only ask for it when this user may actually read Denmark. /api/data is
+    // group-level VaekstNet KPIs and stays available to everyone signed in.
+    const mayReadDk = canReadRegion(resolveAccess(session?.user?.email), "dk")
     Promise.all([
       fetch("/api/data").then(r => r.json()),
-      fetch("/api/open-deals").then(r => r.json()),
+      mayReadDk ? fetch("/api/open-deals").then(r => r.json()) : Promise.resolve({ error: "forbidden" }),
     ]).then(([d, od]) => {
       if (d.error) setError(d.error); else setData(d)
       if (!od.error) setOpenDeals(od)
     }).catch(() => setError("Kunne ikke hente data"))
-  }, [status])
+  }, [status, session])
 
   // Load pipeline data on mount (pipeline is default tab)
   useEffect(() => {
@@ -337,6 +342,8 @@ function DashboardInner() {
 
   useEffect(() => {
     if (status !== "authenticated") return
+    // Denmark-scoped endpoint — skip for users the server would 403.
+    if (!canReadRegion(resolveAccess(session?.user?.email), "dk")) return
     const ytdFrom = `${new Date().getFullYear()}-01-01`
     const ytdTo   = new Date().toISOString().split("T")[0]
     const from = c1From || ytdFrom
@@ -393,23 +400,16 @@ function DashboardInner() {
     return () => clearTimeout(prTimerRef.current)
   }, [prFrom, prTo])
 
-  // Auto-select region based on access permissions
+  // Auto-select region based on access permissions.
+  // Rules come from src/lib/access.ts — the same module the API guards use, so
+  // the UI can never offer a region the server would reject with a 403.
   useEffect(() => {
     if (status !== "authenticated") return
-    const email = session?.user?.email?.toLowerCase() ?? ""
-    const domain = email.split("@")[1] ?? ""
-    const dk   = ["vaekstkapital.dk", "vkfunddistribution.com", "vaekstholdings.com"].includes(domain)
-    const se   = ["vaekstkapital.se", "vkfunddistribution.com", "vaekstholdings.com"].includes(domain)
-    const ship = ["vkfunddistribution.com", "vk-shipping.com", "vaekstholdings.com"].includes(domain)
-    const at   = ["vaekstkapital.at", "vaekstholdings.com", "vkfunddistribution.com"].includes(domain)
-    const fi   = ["vaekstkapital.fi", "vkfunddistribution.com", "vaekstholdings.com"].includes(domain)
-    const no   = ["vaekstkapital.no", "vkfunddistribution.com", "vaekstholdings.com"].includes(domain)
-    if (!dk && !se && ship) setRegion("ship")
-    else if (!dk && !ship && se) setRegion("se")
-    else if (!dk && !se && !ship && at) setRegion("at")
-    else if (!dk && !se && !ship && !at && fi) setRegion("fi")
-    else if (!dk && !se && !ship && !at && !fi && no) setRegion("no")
-  }, [status, session])
+    const allowed = resolveAccess(session?.user?.email).regions
+    if (allowed.length === 0) return
+    // Admins keep whatever ?region= put them on; scoped users land on theirs.
+    if (!allowed.includes(region)) setRegion(allowed[0] as typeof region)
+  }, [status, session, region])
 
   // SE closed deals (live, date-filtered)
   useEffect(() => {
@@ -765,19 +765,19 @@ function DashboardInner() {
 
   const fetchedAt = data ? new Date(data.fetchedAt).toLocaleString("da-DK", {day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}) : "—"
 
-  // Domain-based access control
-  const userEmail = session?.user?.email?.toLowerCase() ?? ""
-  const userDomain = userEmail.split("@")[1] ?? ""
-  const PIPELINE_ALLOWED = new Set(["brj@vaekstkapital.dk","tnp@vaekstkapital.dk","sok@vaekstkapital.dk","aro@vaekstkapital.dk","sts@vaekstkapital.dk","spo@vaekstkapital.se","acs@vaekstkapital.se","nry@vaekstkapital.se"])
-  const ADMIN_EMAILS = new Set(["tlm@vaekstnet.com"])
-  const isAdminDomain     = userDomain === "vkfunddistribution.com" || userDomain === "vaekstholdings.com" || ADMIN_EMAILS.has(userEmail)
-  const canAccessPipeline = isAdminDomain || userDomain === "vaekstkapital.at" || PIPELINE_ALLOWED.has(userEmail)
-  const canAccessDK   = isAdminDomain || ["vaekstkapital.dk", "vkfunddistribution.com", "vaekstholdings.com"].includes(userDomain)
-  const canAccessSE   = isAdminDomain || ["vaekstkapital.se", "vkfunddistribution.com", "vaekstholdings.com"].includes(userDomain)
-  const canAccessShip = isAdminDomain || ["vkfunddistribution.com", "vk-shipping.com", "vaekstholdings.com"].includes(userDomain)
-  const canAccessAT   = isAdminDomain || ["vaekstkapital.at", "vaekstholdings.com", "vkfunddistribution.com"].includes(userDomain)
-  const canAccessFI   = isAdminDomain || ["vaekstkapital.fi", "vkfunddistribution.com", "vaekstholdings.com"].includes(userDomain)
-  const canAccessNO   = isAdminDomain || ["vaekstkapital.no", "vkfunddistribution.com", "vaekstholdings.com"].includes(userDomain)
+  // Access control — rules from src/lib/access.ts, the same module the API
+  // guards use, so the UI cannot offer a region the server would 403.
+  const _access = resolveAccess(session?.user?.email)
+  const userEmail = _access.email
+  const userDomain = _access.domain
+  const isAdminDomain     = _access.isAdmin
+  const canAccessPipeline = _access.canPipeline
+  const canAccessDK   = canReadRegion(_access, "dk")
+  const canAccessSE   = canReadRegion(_access, "se")
+  const canAccessShip = canReadRegion(_access, "ship")
+  const canAccessAT   = canReadRegion(_access, "at")
+  const canAccessFI   = canReadRegion(_access, "fi")
+  const canAccessNO   = canReadRegion(_access, "no")
   const maxFund        = data?.funds?.[0]?.amount ?? 1
   const maxScriveFund  = data?.seller.scriveFunds?.[0]?.amount ?? 1
   const maxPending     = data?.fundsPending?.[0]?.amount ?? 1

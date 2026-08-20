@@ -1,11 +1,5 @@
 import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/authOptions"
-
-const ADMIN_DOMAINS = ["vaekstholdings.com", "vkfunddistribution.com"]
-const ADMIN_EMAILS = new Set(["tlm@vaekstnet.com"])
-const isAdmin = (email?: string | null) =>
-  !!email && (ADMIN_DOMAINS.includes(email.split("@")[1]?.toLowerCase() ?? "") || ADMIN_EMAILS.has(email.toLowerCase()))
+import { guardCapability } from "@/lib/authz"
 
 const UPSTASH_URL   = process.env.KV_REST_API_URL   ?? process.env.UPSTASH_REST_API_URL
 const UPSTASH_TOKEN = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REST_API_TOKEN
@@ -26,9 +20,8 @@ async function readCache(): Promise<unknown | null> {
 }
 
 export async function GET() {
-  const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (!isAdmin(session.user?.email)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  const denied = await guardCapability("canMarketing")
+  if (denied) return denied
 
   const data = await readCache()
   if (!data) return NextResponse.json({ error: "No data synced yet" }, { status: 404 })

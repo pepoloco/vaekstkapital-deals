@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/authOptions"
+import { guardCapability } from "@/lib/authz"
 
 const BASE = "https://api.hubapi.com"
 const KEY = process.env.HUBSPOT_API_KEY!
@@ -96,8 +95,8 @@ async function getParticipantCount(listId: string): Promise<number> {
 }
 
 export async function GET() {
-  const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const denied = await guardCapability("canTour")
+  if (denied) return denied
 
   const seen = new Set<string>()
   const rawLists: ListRaw[] = []

@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/authOptions"
+import { guardAdmin } from "@/lib/authz"
 
 const UPSTASH_URL   = process.env.KV_REST_API_URL   ?? process.env.UPSTASH_REST_API_URL
 const UPSTASH_TOKEN = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REST_API_TOKEN
@@ -16,8 +15,9 @@ const KEYS_TO_DELETE = [
 ]
 
 export async function GET() {
-  const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  // Destructive: wipes all pipeline cache keys. Admins only.
+  const denied = await guardAdmin()
+  if (denied) return denied
 
   if (!UPSTASH_URL || !UPSTASH_TOKEN) {
     return NextResponse.json({ ok: true, mode: "memory", note: "No Redis configured — in-memory cache cleared on server restart" })

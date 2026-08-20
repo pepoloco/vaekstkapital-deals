@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
+import { guardRegion } from "@/lib/authz"
 import { fetchATClosedDeals } from "@/lib/hubspot"
 
 export async function GET(req: NextRequest) {
-  const session = await getServerSession()
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const denied = await guardRegion("at")
+  if (denied) return denied
   const from = req.nextUrl.searchParams.get("from") ?? ""
   const to   = req.nextUrl.searchParams.get("to") ?? ""
   try {

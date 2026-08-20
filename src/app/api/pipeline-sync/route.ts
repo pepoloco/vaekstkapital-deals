@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
+import { isCronRequest, requireUser, unauthorized, forbidden } from "@/lib/authz"
 
 const BASE = "https://api-eu1.hubspot.com"
 const KEY  = process.env.HUBSPOT_API_KEY!
@@ -681,13 +681,12 @@ async function fetchPipelineData() {
 export const maxDuration = 300
 
 export async function GET(req: NextRequest) {
-  // Allow Vercel cron requests (identified by CRON_SECRET) or authenticated sessions
-  const cronSecret = process.env.CRON_SECRET
-  const authHeader = req.headers.get("authorization")
-  const isCron = cronSecret && authHeader === `Bearer ${cronSecret}`
-  if (!isCron) {
-    const session = await getServerSession()
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  // Vercel cron (CRON_SECRET) bypasses the session check; otherwise the caller
+  // must be signed in AND hold Contact Pipeline access.
+  if (!isCronRequest(req)) {
+    const u = await requireUser()
+    if (!u) return unauthorized()
+    if (!u.canPipeline) return forbidden()
   }
   try {
     const data = await fetchPipelineData()

@@ -1,15 +1,5 @@
 import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/authOptions"
-
-const ADMIN_DOMAINS = ["vaekstholdings.com", "vkfunddistribution.com"]
-const ADMIN_EMAILS = new Set(["tlm@vaekstnet.com"])
-const isAdmin = (email?: string | null) =>
-  !!email && (ADMIN_DOMAINS.includes(email.split("@")[1]?.toLowerCase() ?? "") || ADMIN_EMAILS.has(email.toLowerCase()))
-
-const SALES_REPORT_EXCEPTIONS = new Set(["sok@vaekstkapital.dk"])
-const canAccess = (email?: string | null) =>
-  isAdmin(email) || SALES_REPORT_EXCEPTIONS.has((email ?? "").toLowerCase())
+import { guardCapability } from "@/lib/authz"
 
 const BASE = "https://api.hubapi.com"
 const KEY = process.env.HUBSPOT_API_KEY!
@@ -187,9 +177,8 @@ function buildTable(
 }
 
 export async function GET(request: Request) {
-  const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (!canAccess(session.user?.email)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  const denied = await guardCapability("canSalesReport")
+  if (denied) return denied
 
   const url    = new URL(request.url)
   const region = (url.searchParams.get("region") ?? "dk").toLowerCase()

@@ -2,6 +2,7 @@
 import { useEffect } from "react"
 import { useSession, signOut } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import { getAccess as resolveAccess } from "@/lib/access"
 
 const BG = "#F5F2EC", NAV = "#1a1a2e", INK = "#1a1a2e", MUTED = "#6b7280", BORDER = "#e5e0d8"
 
@@ -21,34 +22,18 @@ const TOOLS = [
   { label: "Marketing Reports", sub: "Platform ad spend, leads & deal attribution by market", href: "/marketing",  color: "#0091ae" },
 ]
 
-// Domain → country key mapping (non-admin users can only click their own country)
-const COUNTRY_DOMAIN: Record<string, string> = {
-  dk: "vaekstkapital.dk", se: "vaekstkapital.se", ship: "vk-shipping.com",
-  at: "vaekstkapital.at", fi: "vaekstkapital.fi", no:   "vaekstkapital.no",
-}
-
-const ADMIN_DOMAINS = new Set(["vkfunddistribution.com", "vaekstholdings.com"])
-const ADMIN_EMAILS = new Set(["tlm@vaekstnet.com"])
-
-// DK exceptions: Contact Pipeline + Investor Tour (not Sales Report)
-const DK_EXCEPTIONS = new Set(["brj@vaekstkapital.dk","tnp@vaekstkapital.dk","sok@vaekstkapital.dk","aro@vaekstkapital.dk","sts@vaekstkapital.dk"])
-// SE exceptions: same
-const SE_EXCEPTIONS = new Set(["spo@vaekstkapital.se","acs@vaekstkapital.se","nry@vaekstkapital.se"])
-// Sales Report exceptions (non-admin users granted access)
-const SALES_REPORT_EXCEPTIONS = new Set(["sok@vaekstkapital.dk"])
-
+// All access rules live in src/lib/access.ts, shared with the server guards in
+// src/lib/authz.ts so the UI and the API can never disagree about who sees what.
+// This gating is UX only — the API routes enforce the same rules independently.
 function getAccess(email?: string | null) {
-  if (!email) return { isAdmin: false, canPipelineTour: false, canSalesReport: false, myCountryKey: null as string | null }
-  const lc = email.toLowerCase()
-  const domain = lc.split("@")[1] ?? ""
-  const isAdmin = ADMIN_DOMAINS.has(domain) || ADMIN_EMAILS.has(lc)
-  // AT domain users get Contact Pipeline + Investor Tour
-  const canPipelineTour = isAdmin || DK_EXCEPTIONS.has(lc) || SE_EXCEPTIONS.has(lc) || domain === "vaekstkapital.at"
-  const canSalesReport  = isAdmin || SALES_REPORT_EXCEPTIONS.has(lc)
-  const canMarketing    = isAdmin
-  // Which country card this user can click (null = admin can click all)
-  const myCountryKey = isAdmin ? null : Object.entries(COUNTRY_DOMAIN).find(([, d]) => d === domain)?.[0] ?? null
-  return { isAdmin, canPipelineTour, canSalesReport, canMarketing, myCountryKey }
+  const a = resolveAccess(email)
+  return {
+    isAdmin: a.isAdmin,
+    canPipelineTour: a.canPipeline,
+    canSalesReport: a.canSalesReport,
+    canMarketing: a.canMarketing,
+    myCountryKey: a.region,
+  }
 }
 
 

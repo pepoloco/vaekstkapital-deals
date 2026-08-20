@@ -5,13 +5,12 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import type { MarketOverview, PlatformRow, CampaignRow as StaticCampaignRow } from '@/data/marketing-platform-data'
 import { PLATFORM_DATA_2026 } from '@/data/marketing-platform-data'
+import { getAccess as resolveAccess } from '@/lib/access'
 
-const ALLOWED_DOMAINS = new Set(['vkfunddistribution.com', 'vaekstholdings.com'])
-
+// Rules from src/lib/access.ts — same module the /api/marketing-* guards use.
+// UX only; the API enforces this independently.
 function canAccess(email?: string | null): boolean {
-  if (!email) return false
-  const domain = email.toLowerCase().split('@')[1] ?? ''
-  return ALLOWED_DOMAINS.has(domain)
+  return resolveAccess(email).canMarketing
 }
 
 // ── Live sync data types (mirrors src/lib/marketing-sync.ts output) ─────────

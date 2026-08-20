@@ -3,29 +3,18 @@
 import { useEffect, useState } from "react"
 import { useSession, signOut } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import { getAccess as resolveAccess, tourCountries } from "@/lib/access"
 
 const PORTAL = "144061788"
-const ADMIN_DOMAINS = new Set(["vaekstholdings.com", "vkfunddistribution.com"])
-const ADMIN_EMAILS = new Set(["tlm@vaekstnet.com"])
-const DK_EXCEPTIONS = new Set(["brj@vaekstkapital.dk","tnp@vaekstkapital.dk","sok@vaekstkapital.dk","aro@vaekstkapital.dk","sts@vaekstkapital.dk"])
-const SE_EXCEPTIONS = new Set(["spo@vaekstkapital.se","acs@vaekstkapital.se","nry@vaekstkapital.se"])
+// Rules from src/lib/access.ts — same module the /api/investortur guards use.
+// UX only; the API enforces this independently.
+const isAdmin = (email?: string | null) => resolveAccess(email).canTour
 
-const isAdmin = (email?: string | null) => {
-  if (!email) return false
-  const lc = email.toLowerCase()
-  const domain = lc.split("@")[1] ?? ""
-  return ADMIN_DOMAINS.has(domain) || ADMIN_EMAILS.has(lc) || domain === "vaekstkapital.at" || DK_EXCEPTIONS.has(lc) || SE_EXCEPTIONS.has(lc)
-}
-
-// Returns which country columns this user may see ("DK" | "SE")[]
+// Which country columns this user may see. Previously this fell through to
+// ["DK","SE"] for any unrecognised email — i.e. it failed OPEN. tourCountries()
+// returns [] for unknown users instead.
 function getAllowedCountries(email?: string | null): Array<"DK" | "SE"> {
-  if (!email) return []
-  const lc = email.toLowerCase()
-  const domain = lc.split("@")[1] ?? ""
-  if (ADMIN_DOMAINS.has(domain) || ADMIN_EMAILS.has(lc) || domain === "vaekstkapital.at") return ["DK", "SE"]
-  if (SE_EXCEPTIONS.has(lc) || domain === "vaekstkapital.se") return ["SE"]
-  if (DK_EXCEPTIONS.has(lc) || domain === "vaekstkapital.dk") return ["DK"]
-  return ["DK", "SE"]
+  return tourCountries(resolveAccess(email))
 }
 
 const fmtAmt = (n: number, currency = "DKK") =>
