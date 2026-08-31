@@ -62,6 +62,9 @@ export const SALES_REPORT_EXCEPTIONS: Record<string, Region[]> = {
   "sok@vaekstkapital.dk": ["dk"],
 }
 
+/** Domain exclusively allowed to access the Compass · Vaekstnet section. */
+export const COMPASS_DOMAIN = "vkfunddistribution.com"
+
 export type Access = {
   email: string
   domain: string
@@ -74,6 +77,8 @@ export type Access = {
   canTour: boolean
   canSalesReport: boolean
   canMarketing: boolean
+  /** Compass · Vaekstnet: vkfunddistribution.com only, regardless of admin status. */
+  canCompass: boolean
 }
 
 /** Canonical form of an email before any trust decision is made. */
@@ -108,6 +113,7 @@ export function getAccess(rawEmail: string | null | undefined): Access {
     canTour: canPipeline,
     canSalesReport: isAdmin || email in SALES_REPORT_EXCEPTIONS,
     canMarketing: isAdmin,
+    canCompass: domain === COMPASS_DOMAIN,
   }
 }
 

@@ -1,6 +1,6 @@
 "use client"
 // @ts-nocheck
-import { Suspense, useEffect, useRef, useState } from "react"
+import React, { Suspense, useEffect, useRef, useState } from "react"
 import { useSession, signOut } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { getAccess as resolveAccess, canReadRegion } from "@/lib/access"
@@ -180,15 +180,15 @@ function DashboardInner() {
   const [pipelineData, setPipelineData] = useState<any>(null)
   const [pipelineLoading, setPipelineLoading] = useState(false)
   const searchParams = useSearchParams()
-  const [region, setRegion] = useState<"dk"|"se"|"ship"|"at"|"fi"|"no">(() => {
+  const [region, setRegion] = useState<"dk"|"se"|"ship"|"at"|"fi"|"no"|"compass">(() => {
     if (typeof window === "undefined") return "dk"
     const p = new URLSearchParams(window.location.search).get("region")
-    return (["dk","se","ship","at","fi","no"].includes(p ?? "") ? p : "dk") as "dk"|"se"|"ship"|"at"|"fi"|"no"
+    return (["dk","se","ship","at","fi","no","compass"].includes(p ?? "") ? p : "dk") as "dk"|"se"|"ship"|"at"|"fi"|"no"|"compass"
   })
   // Sync region state on client-side navigation (same route, different ?region=)
   useEffect(() => {
     const p = searchParams.get("region") ?? "dk"
-    const next = (["dk","se","ship","at","fi","no"].includes(p) ? p : "dk") as typeof region
+    const next = (["dk","se","ship","at","fi","no","compass"].includes(p) ? p : "dk") as typeof region
     if (next !== region) setRegion(next)
   }, [searchParams])
   const [pipelineModal, setPipelineModal] = useState<{title: string, deals: any[], fmtAmt?: (n: number) => string} | null>(null)
@@ -280,6 +280,21 @@ function DashboardInner() {
   const [noFundDateLoading, setNoFundDateLoading] = useState<boolean>(false)
   const noFundTimerRef = useRef<any>(null)
   const [noExpandedFund, setNoExpandedFund] = useState<string|null>(null)
+  // Compass.Vaekstnet state
+  const [compassData, setCompassData] = useState<any>(null)
+  const [compassLoading, setCompassLoading] = useState<boolean>(false)
+  const [compassPersonFilter, setCompassPersonFilter] = useState<string>("")
+  // Period picker: YYYY-MM strings
+  const _toDateStr = (d: Date) => d.toISOString().slice(0,10)
+  const _monthStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), 1)
+  const _prevMonthStart = () => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth()-1, 1) }
+  const _prevMonthEnd   = () => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 0) }
+  const [compassFrom, setCompassFrom] = useState<string>(() => _toDateStr(_monthStart(new Date())))
+  const [compassTo,   setCompassTo]   = useState<string>(() => _toDateStr(new Date()))
+  const [compassCompareOn,   setCompassCompareOn]   = useState<boolean>(false)
+  const [compassCompareFrom, setCompassCompareFrom] = useState<string>(() => _toDateStr(_prevMonthStart()))
+  const [compassCompareTo,   setCompassCompareTo]   = useState<string>(() => _toDateStr(_prevMonthEnd()))
+  const [compassPickerOpen, setCompassPickerOpen] = useState<boolean>(false)
   // Section 1 — Deals Closed (filters by close date)
   const [c1From, setC1From]         = useState<string>(_ytdFrom)
   const [c1To, setC1To]             = useState<string>(_ytdTo)
@@ -407,8 +422,10 @@ function DashboardInner() {
     if (status !== "authenticated") return
     const allowed = resolveAccess(session?.user?.email).regions
     if (allowed.length === 0) return
+    // Compass is admin-only; admins keep whatever region they're on.
+    if (region === "compass") return
     // Admins keep whatever ?region= put them on; scoped users land on theirs.
-    if (!allowed.includes(region)) setRegion(allowed[0] as typeof region)
+    if (!allowed.includes(region as any)) setRegion(allowed[0] as typeof region)
   }, [status, session, region])
 
   // SE closed deals (live, date-filtered)
@@ -651,6 +668,23 @@ function DashboardInner() {
     return () => clearTimeout(noFundTimerRef.current)
   }, [noFundDateFrom, noFundDateTo])
 
+  // Compass data fetch — called on first load and when user applies new period
+  const fetchCompass = (from: string, to: string, compareOn: boolean, cFrom: string, cTo: string) => {
+    setCompassLoading(true)
+    setCompassData(null)
+    let url = `/api/compass?from=${from}&to=${to}`
+    if (compareOn) url += `&compareFrom=${cFrom}&compareTo=${cTo}`
+    fetch(url).then(r => r.json()).then(d => {
+      if (!d.error) setCompassData(d)
+      setCompassLoading(false)
+    }).catch(() => setCompassLoading(false))
+  }
+
+  useEffect(() => {
+    if (status !== "authenticated" || region !== "compass" || compassData || compassLoading) return
+    fetchCompass(compassFrom, compassTo, compassCompareOn, compassCompareFrom, compassCompareTo)
+  }, [status, region])
+
   async function triggerSync() {
     setSyncing(true)
     try {
@@ -774,10 +808,11 @@ function DashboardInner() {
   const canAccessPipeline = _access.canPipeline
   const canAccessDK   = canReadRegion(_access, "dk")
   const canAccessSE   = canReadRegion(_access, "se")
-  const canAccessShip = canReadRegion(_access, "ship")
-  const canAccessAT   = canReadRegion(_access, "at")
-  const canAccessFI   = canReadRegion(_access, "fi")
-  const canAccessNO   = canReadRegion(_access, "no")
+  const canAccessShip    = canReadRegion(_access, "ship")
+  const canAccessAT      = canReadRegion(_access, "at")
+  const canAccessFI      = canReadRegion(_access, "fi")
+  const canAccessNO      = canReadRegion(_access, "no")
+  const canAccessCompass = _access.canCompass
   const maxFund        = data?.funds?.[0]?.amount ?? 1
   const maxScriveFund  = data?.seller.scriveFunds?.[0]?.amount ?? 1
   const maxPending     = data?.fundsPending?.[0]?.amount ?? 1
@@ -1119,6 +1154,12 @@ function DashboardInner() {
               <span style={{position:"relative",zIndex:1,display:"flex",alignItems:"center",gap:5,padding:"0 12px",height:"100%",fontSize:11,fontWeight:700,letterSpacing:".06em",color:"#fff"}}>Contact Pipeline</span>
             </button>
           )})()}
+          {canAccessCompass && (
+            <button onClick={() => router.push("/dashboard?region=compass")} className="chip"
+              style={{cursor:"pointer",border: region === "compass" ? "none" : "1px solid rgba(255,255,255,.25)",fontFamily:"inherit",background: region === "compass" ? "#6d3b8e" : "transparent",position:"relative",overflow:"hidden",padding:"0",minWidth:140,height:28,borderRadius:4}}>
+              <span style={{position:"relative",zIndex:1,display:"flex",alignItems:"center",gap:5,padding:"0 12px",height:"100%",fontSize:11,fontWeight:700,letterSpacing:".06em",color: region === "compass" ? "#fff" : "rgba(255,255,255,.75)"}}>Compass · Vaekstnet</span>
+            </button>
+          )}
         </div>
         <div className="nav-r">
           <div className="live"><span className="live-dot"/>Data · HubSpot</div>
@@ -1134,7 +1175,7 @@ function DashboardInner() {
       </nav>
 
       {(() => {
-        const regionName: Record<string,string> = {dk:"Denmark",se:"Sweden",ship:"Shipping",at:"Austria",fi:"Finland",no:"Norway"}
+        const regionName: Record<string,string> = {dk:"Denmark",se:"Sweden",ship:"Shipping",at:"Austria",fi:"Finland",no:"Norway",compass:"Compass · Vaekstnet"}
         return (
           <div style={{position:"sticky",top:"54px",zIndex:10,background:"var(--bei)",borderBottom:"1px solid var(--bdr)",display:"flex",gap:0,padding:"0 24px"}}>
             <button style={{fontSize:11,fontWeight:600,letterSpacing:".06em",textTransform:"uppercase",padding:"12px 20px",border:"none",borderBottom:"2px solid var(--grn)",background:"transparent",color:"var(--grn)",cursor:"default",fontFamily:"inherit",marginBottom:-1}}>
@@ -3284,6 +3325,516 @@ function DashboardInner() {
         )}
 
         </div>{/* /no-region */}
+
+        {/* ── Compass · Vaekstnet ───────────────────────────────────────── */}
+        <div style={{display: region==="compass" ? "" : "none"}}>
+        {compassLoading && (
+          <div style={{padding:"60px 24px",textAlign:"center",color:"var(--ink3)",fontSize:13}}>
+            Loading Compass data from HubSpot — this may take up to a minute…
+          </div>
+        )}
+        {!compassLoading && !compassData && region === "compass" && (
+          <div style={{padding:"60px 24px",textAlign:"center",color:"var(--ink3)",fontSize:13}}>No data yet</div>
+        )}
+        {compassData && (()=>{
+          // ── Design tokens (clean white theme per Thomas) ──────────────
+          const C_BG    = "#ffffff"
+          const C_PAGE  = "#f8f9fa"
+          const C_BDR   = "#e5e7eb"
+          const C_BDR2  = "#f3f4f6"
+          const C_HEAD  = "#f9fafb"
+          const C_INK   = "#111827"
+          const C_INK2  = "#374151"
+          const C_MUTED = "#6b7280"
+          const C_DK    = "#1d4ed8"  // blue for Denmark
+          const C_SE    = "#7c3aed"  // purple for Sweden
+          const C_GRN   = "#15803d"
+          const C_AMBER = "#b45309"
+          const C_SEL   = "#2563eb"  // selected period accent
+
+          const primaryMon: any  = compassData.primary  ?? compassData.thisMonth
+          const compareMon: any  = compassData.compare ?? null
+
+          const safe = (v: any): number => {
+            if (v === null || v === undefined) return 0
+            const n = Number(v)
+            return isNaN(n) || !isFinite(n) ? 0 : n
+          }
+          // Convert any value to a safe string for use in <td> children
+          const cell = (v: any): string => {
+            if (v === null || v === undefined) return "—"
+            const n = Number(v)
+            if (isNaN(n) || !isFinite(n)) return "—"
+            return n > 0 ? String(n) : "—"
+          }
+          const fmtN = (v: any): string => { const n = safe(v); return n > 0 ? n.toLocaleString("da-DK") : "—" }
+          const pct  = (a: any, b: any): number => { const sb = safe(b); return sb > 0 ? Math.round(safe(a)/sb*100) : 0 }
+          const pctS = (a: any, b: any): string => { const p = pct(a,b); return p > 0 ? `${p}%` : "—" }
+
+          // Table style primitives
+          const TH: React.CSSProperties  = {fontSize:11,fontWeight:600,color:C_MUTED,padding:"10px 14px",textAlign:"left",borderBottom:`1px solid ${C_BDR}`,background:C_HEAD,whiteSpace:"nowrap"}
+          const THr: React.CSSProperties = {...TH,textAlign:"right"}
+          const THc: React.CSSProperties = {...TH,textAlign:"center",background:C_HEAD}
+          const TD: React.CSSProperties  = {fontSize:13,color:C_INK2,padding:"10px 14px",borderBottom:`1px solid ${C_BDR2}`,whiteSpace:"nowrap"}
+          const TDr: React.CSSProperties = {...TD,textAlign:"right"}
+          const TDc: React.CSSProperties = {...TD,textAlign:"center"}
+
+          const sectionTitle = (txt: string) => (
+            <div style={{fontSize:11,fontWeight:700,letterSpacing:".07em",textTransform:"uppercase" as const,color:C_MUTED,marginBottom:8,marginTop:24}}>{txt}</div>
+          )
+
+          const card = (children: React.ReactNode, mb=16) => (
+            <div style={{background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:8,overflowX:"auto",marginBottom:mb}}>{children}</div>
+          )
+
+          // Country group separator row
+          const ctryRow = (label: string, color: string, cols: number) => (
+            <tr>
+              <td colSpan={cols} style={{...TD,background:C_HEAD,color,fontWeight:700,fontSize:11,letterSpacing:".05em",textTransform:"uppercase" as const,padding:"8px 14px",borderBottom:`1px solid ${C_BDR}`}}>{label}</td>
+            </tr>
+          )
+
+          // Value cell with optional comparison delta
+          const valCell = (primary: any, compare: any, fmt: (n:number)=>string, isCurrency=false) => {
+            const sp = safe(primary), sc = safe(compare)
+            const pv = fmt(sp)
+            if (compare === null || compare === undefined) return <>{pv}</>
+            const delta = sp - sc
+            const sign  = delta > 0 ? "+" : ""
+            const color = delta > 0 ? C_GRN : delta < 0 ? "#b91c1c" : C_MUTED
+            return (
+              <>
+                {pv}
+                {delta !== 0 && !isNaN(delta) && <span style={{display:"block",fontSize:10,color,marginTop:1}}>{sign}{isCurrency ? fmtN(delta) : String(delta)}</span>}
+              </>
+            )
+          }
+
+          // ── Overview metrics ──────────────────────────────────────────
+          const METRICS = [
+            {label:"Quality Meetings", key:"qualityMeetings", fmt:(v:number)=>String(safe(v)||"—")},
+            {label:"Deal Sent",        key:"dealsSent",       fmt:(v:number)=>String(safe(v)||"—")},
+            {label:"Deal Value",       key:"dealValue",       fmt:fmtN, currency:true},
+            {label:"New Investments",  key:"newInvestments",  fmt:(v:number)=>String(safe(v)||"—")},
+            {label:"Reinvestment",     key:"reinvestment",    fmt:(v:number)=>String(safe(v)||"—")},
+            {label:"Total Investment", key:"totalInvestment", fmt:(v:number)=>String(safe(v)||"—")},
+          ]
+
+          const COUNTRIES = [
+            {key:"dk", label:"Denmark", color:C_DK},
+            {key:"se", label:"Sweden",  color:C_SE},
+          ] as const
+
+          // Attribution helpers
+          const attrTotal = (a: any) => safe(a.new)+safe(a.vaekstnet)+safe(a.existingInvestor)
+          const ATTR_ROWS = [
+            {label:"New",               key:"new"},
+            {label:"VaekstNet",         key:"vaekstnet"},
+            {label:"Existing Investor", key:"existingInvestor"},
+          ]
+
+          return (
+            <div style={{background:C_PAGE,minHeight:"60vh",padding:"24px 28px 60px",fontFamily:"inherit"}}>
+
+              {/* ── Header + controls ─────────────────────────────────── */}
+              <div style={{marginBottom:20}}>
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:12,marginBottom:14}}>
+                  <div>
+                    <div style={{fontSize:20,fontWeight:700,color:C_INK,letterSpacing:"-.01em"}}>Compass · Vaekstnet</div>
+                    <div style={{fontSize:12,color:C_MUTED,marginTop:3}}>Sales activity overview</div>
+                  </div>
+
+                  {/* Date range picker button */}
+                  <div style={{position:"relative" as const}}>
+                    <button onClick={() => setCompassPickerOpen(v => !v)}
+                      style={{display:"flex",alignItems:"center",gap:8,padding:"7px 14px",fontSize:12,fontWeight:500,border:`1px solid ${C_BDR}`,borderRadius:6,background:C_BG,color:C_INK,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap" as const}}>
+                      <span>📅</span>
+                      <span>{primaryMon?.label ?? compassFrom}</span>
+                      {compareMon && <><span style={{color:C_MUTED}}>vs</span><span style={{color:C_MUTED}}>{compareMon.label}</span></>}
+                      <span style={{color:C_MUTED,fontSize:10}}>▼</span>
+                    </button>
+
+                    {/* Picker dropdown */}
+                    {compassPickerOpen && (
+                      <div style={{position:"absolute" as const,top:"calc(100% + 6px)",right:0,zIndex:200,background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.12)",padding:"20px 20px 16px",minWidth:320}}>
+                        <div style={{fontSize:11,fontWeight:700,color:C_MUTED,letterSpacing:".07em",textTransform:"uppercase" as const,marginBottom:12}}>Select Period</div>
+
+                        <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:16}}>
+                          <div style={{flex:1}}>
+                            <div style={{fontSize:11,color:C_MUTED,marginBottom:4}}>From</div>
+                            <input type="date" value={compassFrom} onChange={e => setCompassFrom(e.target.value)}
+                              style={{width:"100%",padding:"6px 8px",fontSize:12,border:`1px solid ${C_BDR}`,borderRadius:6,fontFamily:"inherit",color:C_INK,background:C_BG,boxSizing:"border-box" as const}} />
+                          </div>
+                          <div style={{paddingTop:18,color:C_MUTED}}>→</div>
+                          <div style={{flex:1}}>
+                            <div style={{fontSize:11,color:C_MUTED,marginBottom:4}}>To</div>
+                            <input type="date" value={compassTo} onChange={e => setCompassTo(e.target.value)}
+                              style={{width:"100%",padding:"6px 8px",fontSize:12,border:`1px solid ${C_BDR}`,borderRadius:6,fontFamily:"inherit",color:C_INK,background:C_BG,boxSizing:"border-box" as const}} />
+                          </div>
+                        </div>
+
+                        <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:C_INK2,cursor:"pointer",userSelect:"none" as const,marginBottom:compassCompareOn?12:16}}>
+                          <input type="checkbox" checked={compassCompareOn} onChange={e => setCompassCompareOn(e.target.checked)}
+                            style={{accentColor:C_SEL,width:14,height:14,cursor:"pointer"}} />
+                          Compare to another period
+                        </label>
+
+                        {compassCompareOn && (
+                          <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:16,paddingLeft:22}}>
+                            <div style={{flex:1}}>
+                              <div style={{fontSize:11,color:C_MUTED,marginBottom:4}}>Compare from</div>
+                              <input type="date" value={compassCompareFrom} onChange={e => setCompassCompareFrom(e.target.value)}
+                                style={{width:"100%",padding:"6px 8px",fontSize:12,border:`1px solid ${C_BDR}`,borderRadius:6,fontFamily:"inherit",color:C_INK,background:C_BG,boxSizing:"border-box" as const}} />
+                            </div>
+                            <div style={{paddingTop:18,color:C_MUTED}}>→</div>
+                            <div style={{flex:1}}>
+                              <div style={{fontSize:11,color:C_MUTED,marginBottom:4}}>Compare to</div>
+                              <input type="date" value={compassCompareTo} onChange={e => setCompassCompareTo(e.target.value)}
+                                style={{width:"100%",padding:"6px 8px",fontSize:12,border:`1px solid ${C_BDR}`,borderRadius:6,fontFamily:"inherit",color:C_INK,background:C_BG,boxSizing:"border-box" as const}} />
+                            </div>
+                          </div>
+                        )}
+
+                        <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+                          <button onClick={() => setCompassPickerOpen(false)}
+                            style={{padding:"7px 14px",fontSize:12,border:`1px solid ${C_BDR}`,borderRadius:6,background:"transparent",color:C_MUTED,cursor:"pointer",fontFamily:"inherit"}}>
+                            Cancel
+                          </button>
+                          <button onClick={() => { setCompassPickerOpen(false); fetchCompass(compassFrom, compassTo, compassCompareOn, compassCompareFrom, compassCompareTo) }}
+                            style={{padding:"7px 18px",fontSize:12,fontWeight:600,border:"none",borderRadius:6,background:C_SEL,color:"#fff",cursor:"pointer",fontFamily:"inherit"}}>
+                            Load data
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Person filter */}
+                <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                  <div style={{position:"relative" as const,flex:"0 0 260px"}}>
+                    <input
+                      type="text"
+                      placeholder="Search person…"
+                      value={compassPersonFilter}
+                      onChange={e => setCompassPersonFilter(e.target.value)}
+                      style={{width:"100%",padding:"7px 32px 7px 10px",fontSize:12,border:`1px solid ${C_BDR}`,borderRadius:6,fontFamily:"inherit",color:C_INK,background:C_BG,outline:"none",boxSizing:"border-box" as const}}
+                    />
+                    {compassPersonFilter && (
+                      <button onClick={() => setCompassPersonFilter("")}
+                        style={{position:"absolute" as const,right:8,top:"50%",transform:"translateY(-50%)",border:"none",background:"none",cursor:"pointer",color:C_MUTED,fontSize:14,lineHeight:1,padding:0}}>
+                        ×
+                      </button>
+                    )}
+                  </div>
+                  {/* Country quick-filter */}
+                  {(["all","dk","se"] as const).map(f => (
+                    <button key={f}
+                      onClick={() => setCompassData((d: any) => ({...d, _countryFilter: f}))}
+                      style={{padding:"6px 14px",fontSize:12,fontWeight:600,border:`1px solid ${C_BDR}`,borderRadius:6,cursor:"pointer",fontFamily:"inherit",
+                        background:(compassData._countryFilter??"all")===f ? C_INK : C_BG,
+                        color:(compassData._countryFilter??"all")===f ? "#fff" : C_INK2}}>
+                      {f === "all" ? "All" : f === "dk" ? "🇩🇰 Denmark" : "🇸🇪 Sweden"}
+                    </button>
+                  ))}
+                  {(compassPersonFilter || (compassData._countryFilter && compassData._countryFilter !== "all")) && (
+                    <button onClick={() => { setCompassPersonFilter(""); setCompassData((d: any) => ({...d, _countryFilter:"all"})) }}
+                      style={{padding:"6px 12px",fontSize:12,color:C_MUTED,border:`1px solid ${C_BDR}`,borderRadius:6,cursor:"pointer",background:C_BG,fontFamily:"inherit"}}>
+                      Clear filters
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* ── OVERVIEW ────────────────────────────────────────────── */}
+              {sectionTitle("Sales Activity Overview")}
+              {card(
+                <table style={{width:"100%",borderCollapse:"collapse"}}>
+                  <thead>
+                    <tr>
+                      <th style={{...TH,minWidth:180}}>Metric</th>
+                      {COUNTRIES.map(c => (
+                        <React.Fragment key={c.key}>
+                          <th style={{...THr,color:c.color,borderLeft:`2px solid ${C_BDR}`}}>{c.label}</th>
+                          {compareMon && <th style={{...THr,color:C_MUTED,fontStyle:"italic" as const,fontSize:10}}>vs {compareMon.label}</th>}
+                        </React.Fragment>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {METRICS.map((m, ri) => (
+                      <tr key={m.key} style={{background: ri%2===0 ? C_BG : C_BDR2}}>
+                        <td style={{...TD,color:C_INK,fontWeight:500}}>
+                          {m.label}
+                        </td>
+                        {COUNTRIES.map(c => {
+                          const ccy = m.key === "dealValue" ? (c.key === "dk" ? " DKK" : " SEK") : ""
+                          const fmtWithCcy = (v: any) => { const s = m.fmt(safe(v)); return s === "—" ? s : s + ccy }
+                          return (
+                            <React.Fragment key={c.key}>
+                              <td style={{...TDr,borderLeft:`2px solid ${C_BDR}`,fontWeight:600}}>
+                                {valCell(primaryMon.summary?.[c.key]?.[m.key], compareMon ? compareMon.summary?.[c.key]?.[m.key] : null, fmtWithCcy, m.currency)}
+                              </td>
+                              {compareMon && (
+                                <td style={{...TDr,color:C_MUTED,fontSize:12}}>{fmtWithCcy(compareMon.summary?.[c.key]?.[m.key])}</td>
+                              )}
+                            </React.Fragment>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
+              {/* ── ATTRIBUTION ─────────────────────────────────────────── */}
+              {sectionTitle("Attribution")}
+              {card(
+                <table style={{width:"100%",borderCollapse:"collapse"}}>
+                  <thead>
+                    <tr>
+                      <th style={{...TH,minWidth:160}}>Investment Source</th>
+                      {COUNTRIES.map(c => (
+                        <React.Fragment key={c.key}>
+                          <th style={{...THr,color:c.color,borderLeft:`2px solid ${C_BDR}`}}>{c.label} — count</th>
+                          <th style={{...THr,color:C_MUTED,fontSize:10}}>%</th>
+                          {compareMon && <th style={{...THr,color:C_MUTED,fontStyle:"italic" as const,fontSize:10}}>vs {compareMon.label}</th>}
+                        </React.Fragment>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(()=>{
+                      const pTotals = {dk: attrTotal(primaryMon.attribution.dk), se: attrTotal(primaryMon.attribution.se)}
+                      const cTotals = compareMon ? {dk: attrTotal(compareMon.attribution.dk), se: attrTotal(compareMon.attribution.se)} : null
+                      return (<>
+                        {ATTR_ROWS.map((row, ri) => (
+                          <tr key={row.key} style={{background: ri%2===0 ? C_BG : C_BDR2}}>
+                            <td style={{...TD,color:C_INK,fontWeight:500}}>{row.label}</td>
+                            {COUNTRIES.map(c => {
+                              const pv = safe(primaryMon.attribution[c.key][row.key])
+                              const cv = compareMon ? safe(compareMon.attribution[c.key][row.key]) : null
+                              return (
+                                <React.Fragment key={c.key}>
+                                  <td style={{...TDr,borderLeft:`2px solid ${C_BDR}`,fontWeight:600}}>{cell(pv)}</td>
+                                  <td style={{...TDr,color:C_MUTED,fontSize:12}}>{pctS(pv, pTotals[c.key])}</td>
+                                  {compareMon && <td style={{...TDr,color:C_MUTED,fontSize:12}}>{cell(cv)} <span style={{fontSize:10}}>{pctS(safe(cv), cTotals![c.key])}</span></td>}
+                                </React.Fragment>
+                              )
+                            })}
+                          </tr>
+                        ))}
+                        <tr style={{background:C_HEAD,borderTop:`1px solid ${C_BDR}`}}>
+                          <td style={{...TD,fontWeight:700,color:C_INK}}>Total</td>
+                          {COUNTRIES.map(c => (
+                            <React.Fragment key={c.key}>
+                              <td style={{...TDr,fontWeight:700,color:C_INK,borderLeft:`2px solid ${C_BDR}`}}>{cell(pTotals[c.key])}</td>
+                              <td style={{...TDr,color:C_MUTED,fontSize:12}}>100%</td>
+                              {compareMon && <td style={{...TDr,fontWeight:600,color:C_MUTED,fontSize:12}}>{cell(cTotals![c.key])}</td>}
+                            </React.Fragment>
+                          ))}
+                        </tr>
+                      </>)
+                    })()}
+                  </tbody>
+                </table>
+              )}
+
+              {/* ── INDIVIDUAL PERFORMANCE ──────────────────────────────── */}
+              {sectionTitle("Individual Performance")}
+              {(()=>{
+                // Build merged people list, apply filters
+                const allNames = [...new Set([
+                  ...(primaryMon.people as any[]).map((p:any)=>p.name),
+                  ...(compareMon ? (compareMon.people as any[]).map((p:any)=>p.name) : []),
+                ])]
+                const blank = {qualityMeetings:0,totalCalls:0,avgCallMinutes:0,wonDeals:0,wonAmount:0,newInvestments:0,reinvestment:0,country:"other",teamName:"",role:"other"}
+                const byName = (mon: any, name: string) =>
+                  (mon.people as any[]).find((p:any)=>p.name===name) ?? blank
+                const pMap: Record<string,any> = {}
+                ;(primaryMon.people as any[]).forEach((p:any)=>{pMap[p.name]=p})
+
+                const ctryF = compassData._countryFilter ?? "all"
+                const nameF = compassPersonFilter.trim().toLowerCase()
+
+                const filtered = allNames.filter(name => {
+                  const p = pMap[name] ?? byName(compareMon ?? primaryMon, name)
+                  if (ctryF !== "all" && p.country !== ctryF) return false
+                  if (nameF && !name.toLowerCase().includes(nameF)) return false
+                  return true
+                }).sort((a,b)=>{
+                  const ra=pMap[a]?.role??"other", rb=pMap[b]?.role??"other"
+                  const ca=pMap[a]?.country??"other", cb=pMap[b]?.country??"other"
+                  const roleOrder = (r:string) => r==="consultant"?0:r==="manager"?1:r==="director"?2:3
+                  const ctryOrder = (c:string) => c==="dk"?0:c==="se"?1:2
+                  if (ctryOrder(ca)!==ctryOrder(cb)) return ctryOrder(ca)-ctryOrder(cb)
+                  if (roleOrder(ra)!==roleOrder(rb)) return roleOrder(ra)-roleOrder(rb)
+                  return a.localeCompare(b)
+                })
+
+                // Role sections config: role key → {label, input cols, output cols}
+                type RoleSec = {role:string, label:string, inputCols:{key:string,label:string}[], outputCols:{key:string,label:string}[]}
+                const ROLE_SECTIONS: RoleSec[] = [
+                  {
+                    role:"consultant",
+                    label:"Investment Consultants",
+                    inputCols:[
+                      {key:"totalCalls",      label:"Total Calls"},
+                      {key:"avgCallMinutes",  label:"Avg. Call (min)"},
+                      {key:"qualityMeetings", label:"Quality Meetings"},
+                    ],
+                    outputCols:[
+                      {key:"pctQuality",      label:"% Quality Meetings"},
+                      {key:"wonDeals",        label:"Total Investments"},
+                      {key:"newInvestments",  label:"New Investments"},
+                      {key:"reinvestment",    label:"Reinvestment"},
+                      {key:"convRate",        label:"Conv. Rate (Mtg→Inv)"},
+                    ],
+                  },
+                  {
+                    role:"manager",
+                    label:"Investment Managers",
+                    inputCols:[
+                      {key:"totalCalls",      label:"Total Calls"},
+                      {key:"avgCallMinutes",  label:"Avg. Call (min)"},
+                      {key:"qualityMeetings", label:"Quality Meetings"},
+                    ],
+                    outputCols:[
+                      {key:"wonDeals",        label:"Investments"},
+                      {key:"newInvestments",  label:"New Investments"},
+                      {key:"reinvestment",    label:"Reinvestment"},
+                      {key:"totalInvestment", label:"Total Investment"},
+                      {key:"convRate",        label:"Conv. Rate (Mtg→Inv)"},
+                    ],
+                  },
+                  {
+                    role:"director",
+                    label:"Investment Directors",
+                    inputCols:[
+                      {key:"qualityMeetings", label:"Quality Meetings"},
+                    ],
+                    outputCols:[
+                      {key:"wonDeals",        label:"Total Investments"},
+                      {key:"newInvestments",  label:"New Investments"},
+                      {key:"reinvestment",    label:"Reinvestments"},
+                      {key:"convRate",        label:"Conv. Rate (Mtg→Inv)"},
+                    ],
+                  },
+                  {
+                    role:"other",
+                    label:"Other",
+                    inputCols:[
+                      {key:"totalCalls",      label:"Total Calls"},
+                      {key:"qualityMeetings", label:"Quality Meetings"},
+                    ],
+                    outputCols:[
+                      {key:"wonDeals",        label:"Won Deals"},
+                      {key:"convRate",        label:"Conv. Rate"},
+                    ],
+                  },
+                ]
+
+                const getVal = (p: any, key: string): number => {
+                  if (!p) return 0
+                  if (key === "pctQuality")    return pct(safe(p.qualityMeetings), safe(p.totalCalls))
+                  if (key === "convRate")       return pct(safe(p.wonDeals), safe(p.qualityMeetings))
+                  if (key === "totalInvestment") return safe(p.newInvestments) + safe(p.reinvestment)
+                  const v = safe(p[key])
+                  return isNaN(v) ? 0 : v
+                }
+                const fmtVal = (p: any, key: string): string => {
+                  const v = getVal(p, key)
+                  if (!isFinite(v) || isNaN(v)) return "—"
+                  if (key === "avgCallMinutes") return v > 0 ? `${v} min` : "—"
+                  if (key === "pctQuality" || key === "convRate") return v > 0 ? `${v}%` : "—"
+                  return v > 0 ? String(v) : "—"
+                }
+
+                return ROLE_SECTIONS.map(sec => {
+                  const secPeople = filtered.filter(name => (pMap[name]?.role ?? "other") === sec.role)
+                  if (secPeople.length === 0) return null
+                  const allCols = [...sec.inputCols, ...sec.outputCols]
+                  const totalCols = 2 + allCols.length + (compareMon ? allCols.length : 0)
+
+                  return (
+                    <div key={sec.role} style={{marginBottom:16}}>
+                      <div style={{fontSize:12,fontWeight:700,color:C_INK,marginBottom:6,paddingLeft:2}}>{sec.label}</div>
+                      {card(
+                        <table style={{width:"100%",borderCollapse:"collapse"}}>
+                          <thead>
+                            <tr>
+                              <th style={{...TH,minWidth:160}} rowSpan={2}>Name</th>
+                              <th style={{...TH,minWidth:100}} rowSpan={2}>Country</th>
+                              <th colSpan={sec.inputCols.length + (compareMon ? sec.inputCols.length : 0)}
+                                style={{...THc,borderLeft:`2px solid ${C_BDR}`,borderBottom:`1px solid ${C_BDR}`,color:C_MUTED,fontSize:9,letterSpacing:".08em"}}>INPUT</th>
+                              <th colSpan={sec.outputCols.length + (compareMon ? sec.outputCols.length : 0)}
+                                style={{...THc,borderLeft:`2px solid ${C_BDR}`,borderBottom:`1px solid ${C_BDR}`,color:C_DK,fontSize:9,letterSpacing:".08em"}}>OUTPUT</th>
+                            </tr>
+                            <tr>
+                              {sec.inputCols.map((c,i) => (
+                                <React.Fragment key={c.key}>
+                                  <th style={{...THr,borderLeft:i===0?`2px solid ${C_BDR}`:"none"}}>{c.label}</th>
+                                  {compareMon && <th style={{...THr,color:C_MUTED,fontSize:10,fontStyle:"italic" as const}}>prev</th>}
+                                </React.Fragment>
+                              ))}
+                              {sec.outputCols.map((c,i) => (
+                                <React.Fragment key={c.key}>
+                                  <th style={{...THr,borderLeft:i===0?`2px solid ${C_BDR}`:"none"}}>{c.label}</th>
+                                  {compareMon && <th style={{...THr,color:C_MUTED,fontSize:10,fontStyle:"italic" as const}}>prev</th>}
+                                </React.Fragment>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(()=>{
+                              let lastCtry2 = ""
+                              return secPeople.map((name, ri) => {
+                                const pP = byName(primaryMon, name)
+                                const cP = compareMon ? byName(compareMon, name) : null
+                                const ctry = pP.country ?? "other"
+                                const showGrp2 = ctry !== lastCtry2
+                                if (showGrp2) lastCtry2 = ctry
+                                return (
+                                  <React.Fragment key={name}>
+                                    {showGrp2 && (
+                                      <tr>
+                                        <td colSpan={totalCols} style={{...TD,background:C_HEAD,color:ctry==="dk"?C_DK:ctry==="se"?C_SE:C_MUTED,fontWeight:700,fontSize:10,letterSpacing:".05em",textTransform:"uppercase" as const,padding:"7px 14px",borderBottom:`1px solid ${C_BDR}`}}>
+                                          {ctry==="dk"?"Denmark":ctry==="se"?"Sweden":"Other"}
+                                        </td>
+                                      </tr>
+                                    )}
+                                    <tr style={{background:ri%2===0?C_BG:C_BDR2}}>
+                                      <td style={{...TD,color:C_INK,fontWeight:500}}>{name}</td>
+                                      <td style={{...TD,color:C_MUTED,fontSize:11}}>{pP.teamName||"—"}</td>
+                                      {sec.inputCols.map((c,i) => (
+                                        <React.Fragment key={c.key}>
+                                          <td style={{...TDr,borderLeft:i===0?`2px solid ${C_BDR}`:"none"}}>{fmtVal(pP,c.key)}</td>
+                                          {compareMon && <td style={{...TDr,color:C_MUTED,fontSize:11}}>{fmtVal(cP!,c.key)}</td>}
+                                        </React.Fragment>
+                                      ))}
+                                      {sec.outputCols.map((c,i) => (
+                                        <React.Fragment key={c.key}>
+                                          <td style={{...TDr,borderLeft:i===0?`2px solid ${C_BDR}`:"none",fontWeight:600,color:C_INK}}>{fmtVal(pP,c.key)}</td>
+                                          {compareMon && <td style={{...TDr,color:C_MUTED,fontSize:11}}>{fmtVal(cP!,c.key)}</td>}
+                                        </React.Fragment>
+                                      ))}
+                                    </tr>
+                                  </React.Fragment>
+                                )
+                              })
+                            })()}
+                          </tbody>
+                        </table>
+                      , 0)}
+                    </div>
+                  )
+                })
+              })()}
+
+            </div>
+          )
+        })()}
+        </div>{/* /compass-region */}
 
       </main>
 

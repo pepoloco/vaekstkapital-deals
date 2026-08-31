@@ -16,10 +16,11 @@ const COUNTRIES = [
 ]
 
 const TOOLS = [
-  { label: "Contact Pipeline",  sub: "Lifecycle stages, stuck contacts, nurture candidates", href: "/pipeline",     color: "#2d68b0" },
-  { label: "Investor Tour",     sub: "VaekstNet investor onboarding & AUM",                 href: "/investortur",  color: "#15624c" },
-  { label: "Sales Report",      sub: "YTD subscription & fund performance",                 href: "/salgsrapport", color: "#5a4998" },
-  { label: "Marketing Reports", sub: "Platform ad spend, leads & deal attribution by market", href: "/marketing",  color: "#0091ae" },
+  { label: "Contact Pipeline",    sub: "Lifecycle stages, stuck contacts, nurture candidates",     href: "/pipeline",                  color: "#2d68b0", adminOnly: false },
+  { label: "Investor Tour",       sub: "VaekstNet investor onboarding & AUM",                     href: "/investortur",               color: "#15624c", adminOnly: false },
+  { label: "Sales Report",        sub: "YTD subscription & fund performance",                     href: "/salgsrapport",              color: "#5a4998", adminOnly: false },
+  { label: "Marketing Reports",   sub: "Platform ad spend, leads & deal attribution by market",   href: "/marketing",                 color: "#0091ae", adminOnly: false },
+  { label: "Compass · Vaekstnet", sub: "DK & SE monthly performance — meetings, deals, team KPIs", href: "/dashboard?region=compass", color: "#6d3b8e", adminOnly: false, compassOnly: true },
 ]
 
 // All access rules live in src/lib/access.ts, shared with the server guards in
@@ -32,6 +33,7 @@ function getAccess(email?: string | null) {
     canPipelineTour: a.canPipeline,
     canSalesReport: a.canSalesReport,
     canMarketing: a.canMarketing,
+    canCompass: a.canCompass,
     myCountryKey: a.region,
   }
 }
@@ -53,8 +55,8 @@ export default function HubPage() {
     )
   }
 
-  const { isAdmin, canPipelineTour, canSalesReport, canMarketing, myCountryKey } = getAccess(session?.user?.email)
-  const showTools = canPipelineTour || canSalesReport || canMarketing
+  const { isAdmin, canPipelineTour, canSalesReport, canMarketing, canCompass, myCountryKey } = getAccess(session?.user?.email)
+  const showTools = isAdmin || canPipelineTour || canSalesReport || canMarketing || canCompass
 
   return (
     <div style={{ minHeight: "100vh", background: BG, fontFamily: "inherit" }}>
@@ -115,6 +117,8 @@ export default function HubPage() {
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: MUTED, marginBottom: 16 }}>Analytics Tools</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
               {TOOLS.filter(t => {
+                if ((t as any).compassOnly) return canCompass
+                if (t.adminOnly) return isAdmin
                 if (t.href === "/pipeline" || t.href === "/investortur") return canPipelineTour
                 if (t.href === "/salgsrapport") return canSalesReport
                 if (t.href === "/marketing") return canMarketing
