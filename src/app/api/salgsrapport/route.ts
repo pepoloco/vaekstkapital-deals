@@ -16,6 +16,7 @@ type RegionConfig = {
   teamName: string | null       // null = all owners; string = fetch members of matching HubSpot team
   requireCoac: boolean
   hardcodedOwners?: string[]    // if set, bypasses team API and uses this name list directly
+  hardcodedStartDates?: Record<string, string>  // consultant name → ISO date string (overrides HubSpot createdAt)
 }
 
 const REGIONS: Record<string, RegionConfig> = {
@@ -23,7 +24,7 @@ const REGIONS: Record<string, RegionConfig> = {
     label: "Denmark · Phone Sales",
     currency: "DKK",
     currencies: ["DKK"],
-    teamName: "team denmark",
+    teamName: "team denmark - phone sales",
     requireCoac: true,
   },
   se: {
@@ -32,14 +33,16 @@ const REGIONS: Record<string, RegionConfig> = {
     currencies: ["SEK", "DKK"],  // SEE Residential pipeline uses DKK
     teamName: null,
     requireCoac: false,
-    hardcodedOwners: ["Simon Otterstedt", "Emil Antonsson"],
+    hardcodedOwners: ["Emil Antonsson", "Beshan Hashar"],
   },
   at: {
     label: "Austria",
     currency: "EUR",
     currencies: ["EUR"],
-    teamName: "team austria",
+    teamName: null,
     requireCoac: true,
+    hardcodedOwners: ["Michael Trost"],
+    hardcodedStartDates: { "Michael Trost": "2026-02-27" },
   },
   shipping: {
     label: "Shipping",
@@ -47,6 +50,13 @@ const REGIONS: Record<string, RegionConfig> = {
     currencies: ["USD"],
     teamName: null,
     requireCoac: false,
+    hardcodedOwners: ["Bendik", "Magne Juvik", "Magnus Fischer", "Martin Engh"],
+    hardcodedStartDates: {
+      "Bendik":         "2025-05-14",
+      "Magne Juvik":    "2025-05-14",
+      "Magnus Fischer": "2025-05-14",
+      "Martin Engh":    "2025-12-04",
+    },
   },
 }
 
@@ -59,17 +69,19 @@ function fuzzyMatch(ownerName: string, targets: string[]): string | null {
   return null
 }
 
-async function getOwners(key = KEY): Promise<Record<string, string>> {
-  const byId: Record<string, string> = {}
+type OwnerInfo = { name: string; createdAt?: string }
+
+async function getOwners(key = KEY): Promise<Record<string, OwnerInfo>> {
+  const byId: Record<string, OwnerInfo> = {}
   let after: string | undefined
   do {
     await sleep(150)
     const url = `${BASE}/crm/v3/owners?limit=100${after ? `&after=${after}` : ""}`
     const res = await fetch(url, { headers: { Authorization: `Bearer ${key}` }, cache: "no-store" })
     const data = await res.json()
-    for (const o of (data.results ?? []) as Array<{ id: string; firstName: string; lastName: string }>) {
+    for (const o of (data.results ?? []) as Array<{ id: string; firstName: string; lastName: string; createdAt?: string }>) {
       const name = [o.firstName, o.lastName].filter(Boolean).join(" ")
-      if (name) byId[String(o.id)] = name
+      if (name) byId[String(o.id)] = { name, createdAt: o.createdAt }
     }
     after = (data.paging as { next?: { after: string } })?.next?.after
   } while (after)
@@ -137,12 +149,37 @@ export async function GET(request: Request) {
   type Cell = { amount: number; count: number; deals: DealRef[] }
   const data: Record<string, Record<number, Record<number, Cell>>> = {}
   const ownerTotals: Record<string, number> = {}
+  const startDates: Record<string, string> = {}  // consultant name → ISO date
+
+  // Pre-seed hardcoded owners so they always appear even with no deals.
+  // Build a name→ownerInfo reverse map for start-date lookup.
+  if (ownerFilter) {
+    const ownersByName: Record<string, OwnerInfo> = {}
+    for (const info of Object.values(owners)) ownersByName[info.name.toLowerCase()] = info
+
+    for (const target of ownerFilter) {
+      ownerTotals[target] = ownerTotals[target] ?? 0
+      if (!startDates[target]) {
+        const hardcoded = config.hardcodedStartDates?.[target]
+        if (hardcoded) {
+          startDates[target] = hardcoded
+        } else {
+          // find the matching owner's createdAt via fuzzy match
+          const matchedName = Object.keys(ownersByName).find(n =>
+            target.toLowerCase().split(/\s+/).every(w => n.includes(w))
+          )
+          if (matchedName) startDates[target] = ownersByName[matchedName].createdAt ?? ""
+        }
+      }
+    }
+  }
 
   for (const d of allDeals) {
     if (config.requireCoac && d.checked_by_coacs !== "✔" && d.checked_by_coacs !== "true") continue
 
-    const rawName = owners[d.hubspot_owner_id]
-    if (!rawName) continue
+    const ownerInfo = owners[d.hubspot_owner_id]
+    if (!ownerInfo) continue
+    const rawName = ownerInfo.name
 
     const consultant = ownerFilter
       ? fuzzyMatch(rawName, ownerFilter)
@@ -164,9 +201,13 @@ export async function GET(request: Request) {
     data[consultant][year][month].count  += 1
     data[consultant][year][month].deals.push({ id: d.hs_object_id, name: d.dealname || "Unknown Deal", amount })
     ownerTotals[consultant] = (ownerTotals[consultant] ?? 0) + amount
+    if (!startDates[consultant]) {
+      const hardcoded = config.hardcodedStartDates?.[consultant]
+      startDates[consultant] = hardcoded ?? ownerInfo.createdAt ?? ""
+    }
   }
 
-  const consultants = Object.keys(ownerTotals).sort((a, b) => a.localeCompare(b))
+  const consultants = Object.keys(ownerTotals).sort((a, b) => ownerTotals[b] - ownerTotals[a] || a.localeCompare(b))
 
   return NextResponse.json({
     region,
@@ -175,6 +216,7 @@ export async function GET(request: Request) {
     consultants,
     years: YEARS,
     data,
+    startDates,
     generatedAt: new Date().toISOString(),
   })
 }

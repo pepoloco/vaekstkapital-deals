@@ -96,6 +96,7 @@ type ReportData = {
   consultants: string[]
   years: number[]
   data: Record<string, Record<number, Record<number, Cell>>>
+  startDates?: Record<string, string>
   generatedAt: string
 }
 
@@ -162,7 +163,7 @@ function DealPopover({ deals, currency, x, y, onClose, portal = "144061788" }: {
 }
 
 function SalesTable({ report }: { report: ReportData }) {
-  const { region, currency, consultants, data } = report
+  const { region, currency, consultants, data, startDates } = report
   const [popover, setPopover] = useState<{ deals: DealRef[]; x: number; y: number } | null>(null)
 
   if (consultants.length === 0) {
@@ -207,12 +208,22 @@ function SalesTable({ report }: { report: ReportData }) {
             }}>Month</th>
             {consultants.map((c, ci) => {
               const clr = getClr(c, ci, region)
+              const startLabel = startDates?.[c]
+                ? new Date(startDates[c]).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                : null
               return (
                 <th key={c} colSpan={YEARS.length} style={{
                   padding: "10px 12px", textAlign: "center", fontSize: 11, fontWeight: 700,
                   background: clr.bg, color: clr.text,
                   borderRight: bdr2, borderBottom: "none", whiteSpace: "nowrap",
-                }}>{c}</th>
+                }}>
+                  {c}
+                  {startLabel && (
+                    <span style={{ display: "block", fontSize: 9, fontWeight: 400, opacity: 0.7, marginTop: 2 }}>
+                      since {startLabel}
+                    </span>
+                  )}
+                </th>
               )
             })}
           </tr>
