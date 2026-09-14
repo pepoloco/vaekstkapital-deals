@@ -21,7 +21,7 @@ const TOOLS = [
   { label: "Seminars",            sub: "Webinar attendees — pre & post-investment activity",        href: "/seminars",                  color: "#7c3aed", adminOnly: false },
   { label: "Sales Report",        sub: "YTD subscription & fund performance",                     href: "/salgsrapport",              color: "#5a4998", adminOnly: false },
   { label: "Marketing Reports",   sub: "Platform ad spend, leads & deal attribution by market",   href: "/marketing",                 color: "#0091ae", adminOnly: false },
-  { label: "Compass · Vaekstnet", sub: "DK & SE monthly performance — meetings, deals, team KPIs", href: "/dashboard?region=compass", color: "#6d3b8e", adminOnly: false, compassOnly: true },
+  { label: "Compass · Vaekstnet", sub: "DK & SE monthly performance — meetings, deals, team KPIs", href: "/dashboard?region=compass", color: "#6d3b8e", adminOnly: false, compassOnly: true, underConstruction: true },
 ]
 
 // All access rules live in src/lib/access.ts, shared with the server guards in
@@ -133,7 +133,12 @@ export default function HubPage() {
                     <div style={{ fontSize: 15, fontWeight: 700, color: INK }}>{t.label}</div>
                   </div>
                   <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.5 }}>{t.sub}</div>
-                  <div style={{ marginTop: 16, fontSize: 12, color: t.color, fontWeight: 600 }}>Open →</div>
+                  {(t as any).underConstruction && (
+                    <div style={{ marginTop: 8, fontSize: 11, fontWeight: 700, color: "#dc2626", letterSpacing: ".02em" }}>🚧 Under construction</div>
+                  )}
+                  <div style={{ marginTop: 14 }}>
+                    <span style={{ display: "inline-block", background: "#2563eb", color: "#fff", fontSize: 12, fontWeight: 600, padding: "6px 16px", borderRadius: 6 }}>Open</span>
+                  </div>
                 </a>
               ))}
             </div>

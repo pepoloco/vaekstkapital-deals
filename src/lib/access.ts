@@ -113,7 +113,7 @@ export function getAccess(rawEmail: string | null | undefined): Access {
     canTour: canPipeline,
     canSalesReport: isAdmin || email in SALES_REPORT_EXCEPTIONS,
     canMarketing: isAdmin,
-    canCompass: domain === COMPASS_DOMAIN,
+    canCompass: isAdmin || domain === COMPASS_DOMAIN || domain === "vaekstnet.com",
   }
 }
 
