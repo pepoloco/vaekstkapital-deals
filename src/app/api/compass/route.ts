@@ -36,13 +36,15 @@ async function searchAll(objectType: string, filterGroups: object[], properties:
 }
 
 type OwnerMaps = {
-  byId:     Record<string, string>   // ownerId → name
-  byUserId: Record<string, string>   // userId  → ownerId
+  byId:          Record<string, string>   // ownerId → name
+  byUserId:      Record<string, string>   // userId  → ownerId
+  emailByOwner:  Record<string, string>   // ownerId → email
 }
 
 async function getOwnerMaps(): Promise<OwnerMaps> {
-  const byId:     Record<string, string> = {}
-  const byUserId: Record<string, string> = {}
+  const byId:         Record<string, string> = {}
+  const byUserId:     Record<string, string> = {}
+  const emailByOwner: Record<string, string> = {}
   let after: string | undefined
   do {
     await sleep(150)
@@ -54,11 +56,12 @@ async function getOwnerMaps(): Promise<OwnerMaps> {
       if (name) {
         byId[String(o.id)] = name
         if (o.userId) byUserId[String(o.userId)] = String(o.id)
+        if (o.email) emailByOwner[String(o.id)] = (o.email as string).toLowerCase()
       }
     }
     after = data.paging?.next?.after
   } while (after)
-  return { byId, byUserId }
+  return { byId, byUserId, emailByOwner }
 }
 
 type TeamRole = "consultant" | "manager" | "director" | "other"
@@ -71,6 +74,9 @@ type TeamMember = {
   country:  "dk" | "se" | "other"
 }
 
+// Consultants excluded from the team lists by email
+const EXCLUDED_CONSULTANT_EMAILS = new Set(["brj@vaekstkapital.dk"])
+
 async function getTeamMembers(owners: OwnerMaps): Promise<TeamMember[]> {
   try {
     const res  = await fetch(`${BASE}/settings/v3/users/teams?includeMembers=true`, {
@@ -82,11 +88,13 @@ async function getTeamMembers(owners: OwnerMaps): Promise<TeamMember[]> {
     const seen    = new Set<string>() // ownerId+role dedupe
 
     for (const team of data.results ?? []) {
-      const tl     = (team.name || "").toLowerCase()
-      const role: TeamRole =
-        tl.includes("consultant") ? "consultant" :
-        tl.includes("manager")   ? "manager"    :
-        tl.includes("director")  ? "director"   : "other"
+      const tl = (team.name || "").toLowerCase()
+
+      // Only include teams that map to a known role
+      const role: TeamRole | null =
+        tl.includes("telemarketing") ? "consultant" :
+        tl.includes("phone sales")   ? "manager"    : null
+      if (!role) continue
 
       const country: TeamMember["country"] =
         tl.includes("denmark") || tl.includes(" dk") || tl.startsWith("dk ") || tl.includes("(dk)") ? "dk" :
@@ -97,6 +105,11 @@ async function getTeamMembers(owners: OwnerMaps): Promise<TeamMember[]> {
         if (!ownerId) continue
         const name = owners.byId[ownerId]
         if (!name) continue
+        // Exclude specific individuals from consultant lists
+        if (role === "consultant") {
+          const email = owners.emailByOwner[ownerId] ?? ""
+          if (EXCLUDED_CONSULTANT_EMAILS.has(email)) continue
+        }
         const dedupeKey = `${ownerId}::${role}`
         if (seen.has(dedupeKey)) continue
         seen.add(dedupeKey)
@@ -268,6 +281,43 @@ export async function GET(req: Request) {
     return first === undefined || first >= periodFrom
   }
 
+  // LTI cohort: group all customers by acquisition quarter (Q1 2024–Q4 2026)
+  // Rows = 12 quarters; columns = Q0…Q15 offset from acquisition quarter
+  const COHORT_START_YEAR = 2024
+  const dateToQOffset = (ts: number) => {
+    const d = new Date(ts)
+    return (d.getFullYear() - COHORT_START_YEAR) * 4 + Math.floor(d.getMonth() / 3)
+  }
+  const NUM_COHORT_QUARTERS = 12, MAX_OFFSET = 16
+  const cohortRows: Array<{ quarter: string; customers: number; deals: number[]; amounts: number[] }> =
+    Array.from({ length: NUM_COHORT_QUARTERS }, (_, i) => {
+      const y = COHORT_START_YEAR + Math.floor(i / 4)
+      const q = (i % 4) + 1
+      return { quarter: `Q${q} ${y}`, customers: 0, deals: Array(MAX_OFFSET).fill(0), amounts: Array(MAX_OFFSET).fill(0) }
+    })
+  const seenAcq = new Set<string>()
+  for (const deal of [...histDKWon, ...histSEWon]) {
+    const k = (deal.dealname || "").toLowerCase().trim()
+    if (!k) continue
+    const firstTs = firstDeal[k]
+    if (!firstTs) continue
+    const acqIdx = dateToQOffset(firstTs)
+    if (acqIdx < 0 || acqIdx >= NUM_COHORT_QUARTERS) continue
+    // Count unique customers per cohort (by first-deal key)
+    const acqKey = `${k}::${acqIdx}`
+    if (!seenAcq.has(acqKey)) {
+      seenAcq.add(acqKey)
+      cohortRows[acqIdx].customers++
+    }
+    // Count this deal's offset from acquisition
+    const dealTs = new Date(deal.closedate).getTime()
+    const offset = dateToQOffset(dealTs) - acqIdx
+    if (offset >= 0 && offset < MAX_OFFSET) {
+      cohortRows[acqIdx].deals[offset]++
+      cohortRows[acqIdx].amounts[offset] += parseFloat(deal.amount) || 0
+    }
+  }
+
   // Build owner ID sets per country for meetings attribution
   const dkOwnerIds = new Set(teamMembers.filter(m => m.country === "dk").map(m => m.ownerId))
   const seOwnerIds = new Set(teamMembers.filter(m => m.country === "se").map(m => m.ownerId))
@@ -362,13 +412,48 @@ export async function GET(req: Request) {
     }
   }
 
+  // AUC data for VaekstNet section
+  const fetchAUC = async () => {
+    const TEST_DOMAINS = ["vaekstnet.com","vaekstkapital.com","mailinator.com","yopmail.com","example.com"]
+    const isTest = (email: string) => TEST_DOMAINS.some(d => email.toLowerCase().endsWith("@" + d))
+    const [aucContacts, aucCompanies] = await Promise.all([
+      searchAll("contacts",
+        [{ filters: [{ propertyName: "total_auc", operator: "GT", value: "0" }] }],
+        ["total_auc","vk_auc_in_vk_funds","cash_balance","firstname","lastname","email","hubspot_owner_id","customer_id"]
+      ),
+      searchAll("companies",
+        [{ filters: [{ propertyName: "total_auc", operator: "GT", value: "0" }] }],
+        ["total_auc","vk_auc_in_vk_funds","cash_balance","name","hubspot_owner_id"]
+      ),
+    ])
+    const real = aucContacts.filter(c => !isTest(c.email || ""))
+    const sum = (a: Record<string,string>[], k: string) => a.reduce((s,c)=>s+(parseFloat(c[k])||0),0)
+    const top = [
+      ...real.map(c=>({ name:[c.firstname,c.lastname].filter(Boolean).join(" ")||"Unknown", type:"Contact" as const, consultant:owners.byId[c.hubspot_owner_id]||"—", totalAuc:parseFloat(c.total_auc)||0, vkFunds:parseFloat(c.vk_auc_in_vk_funds)||0, cash:parseFloat(c.cash_balance)||0 })),
+      ...aucCompanies.map(c=>({ name:c.name||"Unknown", type:"Company" as const, consultant:owners.byId[c.hubspot_owner_id]||"—", totalAuc:parseFloat(c.total_auc)||0, vkFunds:parseFloat(c.vk_auc_in_vk_funds)||0, cash:parseFloat(c.cash_balance)||0 })),
+    ].sort((a,b)=>b.totalAuc-a.totalAuc).slice(0,25)
+    const vnCount = real.filter(c=>c.customer_id).length
+    return {
+      total:   sum(real,"total_auc") + sum(aucCompanies,"total_auc"),
+      vkFunds: sum(real,"vk_auc_in_vk_funds") + sum(aucCompanies,"vk_auc_in_vk_funds"),
+      cash:    sum(real,"cash_balance") + sum(aucCompanies,"cash_balance"),
+      investorsOnPlatform: vnCount,
+      top25: top,
+    }
+  }
+
   // Run periods sequentially to stay within HubSpot rate limits
-  const primaryData = await computeMonth(primary.fromMs, primary.toMs, primary.label)
+  const [primaryData, aucData] = await Promise.all([
+    computeMonth(primary.fromMs, primary.toMs, primary.label),
+    fetchAUC(),
+  ])
   const compareData = compare ? await computeMonth(compare.fromMs, compare.toMs, compare.label) : null
 
   return NextResponse.json({
     primary:     primaryData,
     compare:     compareData,
+    auc:         aucData,
+    ltiCohort:   cohortRows,
     // Keep legacy names so existing state that hasn't re-fetched still works
     thisMonth:   primaryData,
     lastMonth:   compareData ?? primaryData,

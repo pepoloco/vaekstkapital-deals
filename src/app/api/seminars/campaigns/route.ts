@@ -112,6 +112,9 @@ async function getParticipantCount(listId: string): Promise<number> {
   return (data.total as number) ?? 0
 }
 
+// Temporarily excluded webinar dates (YYYY-MM-DD). Remove when ready to show again.
+const EXCLUDED_DATES = new Set(["2026-08-11"])
+
 export async function GET() {
   const denied = await guardCapability("canTour")
   if (denied) return denied
@@ -139,14 +142,16 @@ export async function GET() {
 
   type Campaign = { id: string; name: string; country: "DK" | "SE"; startDate: string; endDate: string; participantCount: number }
 
-  const campaigns: Campaign[] = rawLists.map(l => ({
-    id: l.listId,
-    name: l.name,
-    country: extractCountry(l.name),
-    startDate: parseEventDate(l.name, l.createdAt),
-    endDate: "",
-    participantCount: 0,
-  }))
+  const campaigns: Campaign[] = rawLists
+    .map(l => ({
+      id: l.listId,
+      name: l.name,
+      country: extractCountry(l.name),
+      startDate: parseEventDate(l.name, l.createdAt),
+      endDate: "",
+      participantCount: 0,
+    }))
+    .filter(c => !EXCLUDED_DATES.has(c.startDate))
 
   const BATCH = 5
   for (let i = 0; i < campaigns.length; i += BATCH) {

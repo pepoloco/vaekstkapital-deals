@@ -161,6 +161,182 @@ function exportCSV(data: any) {
   a.click(); URL.revokeObjectURL(url)
 }
 
+// ── Facebook Business Manager-style date range picker ─────────────────────────
+const FB_PRESETS = [
+  "Today","Yesterday","Today and yesterday",
+  "Last 7 days","Last 14 days","Last 28 days","Last 30 days",
+  "This week","Last week","This month","Last month",
+]
+
+function addMonths(d: Date, n: number) {
+  const r = new Date(d)
+  r.setDate(1)
+  r.setMonth(r.getMonth() + n)
+  return r
+}
+function daysInMonth(year: number, month: number) {
+  return new Date(year, month + 1, 0).getDate()
+}
+function isoDate(d: Date) {
+  return d.toISOString().split("T")[0]
+}
+function presetToRange(preset: string): { start: string; end: string; label: string } {
+  const now = new Date()
+  const today = isoDate(now)
+  const yest  = isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))
+  if (preset === "Today") return { start: today, end: today, label: "Today" }
+  if (preset === "Yesterday") return { start: yest, end: yest, label: "Yesterday" }
+  if (preset === "Today and yesterday") return { start: yest, end: today, label: "Today and yesterday" }
+  if (preset === "Last 7 days") { const s = isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6)); return { start: s, end: today, label: "Last 7 days" } }
+  if (preset === "Last 14 days") { const s = isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 13)); return { start: s, end: today, label: "Last 14 days" } }
+  if (preset === "Last 28 days") { const s = isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 27)); return { start: s, end: today, label: "Last 28 days" } }
+  if (preset === "Last 30 days") { const s = isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29)); return { start: s, end: today, label: "Last 30 days" } }
+  if (preset === "This week") { const d = now.getDay(); const s = isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - (d === 0 ? 6 : d - 1))); return { start: s, end: today, label: "This week" } }
+  if (preset === "Last week") { const d = now.getDay(); const e = isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - (d === 0 ? 7 : d))); const s = isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - (d === 0 ? 13 : d + 6))); return { start: s, end: e, label: "Last week" } }
+  if (preset === "This month") { const s = isoDate(new Date(now.getFullYear(), now.getMonth(), 1)); return { start: s, end: today, label: "This month" } }
+  if (preset === "Last month") { const s = isoDate(new Date(now.getFullYear(), now.getMonth() - 1, 1)); const e = isoDate(new Date(now.getFullYear(), now.getMonth(), 0)); return { start: s, end: e, label: "Last month" } }
+  return { start: today, end: today, label: preset }
+}
+
+function FBDatePicker({ onApply, onClose }: { onApply: (label: string, start: string, end: string) => void; onClose: () => void }) {
+  const now = new Date()
+  const [leftMonth, setLeftMonth] = React.useState(new Date(now.getFullYear(), now.getMonth() - 1, 1))
+  const [activePreset, setActivePreset] = React.useState("Last 30 days")
+  const [rangeStart, setRangeStart] = React.useState(() => presetToRange("Last 30 days").start)
+  const [rangeEnd, setRangeEnd] = React.useState(() => presetToRange("Last 30 days").end)
+  const [hovered, setHovered] = React.useState<string|null>(null)
+  const [compareOn, setCompareOn] = React.useState(false)
+  const [customStart, setCustomStart] = React.useState("")
+  const [customEnd, setCustomEnd] = React.useState("")
+
+  const rightMonth = addMonths(leftMonth, 1)
+
+  function selectPreset(p: string) {
+    setActivePreset(p)
+    const r = presetToRange(p)
+    setRangeStart(r.start); setRangeEnd(r.end)
+    setCustomStart(""); setCustomEnd("")
+  }
+
+  function handleDayClick(ds: string) {
+    setActivePreset("")
+    if (!rangeStart || (rangeStart && rangeEnd)) {
+      setRangeStart(ds); setRangeEnd("")
+    } else {
+      if (ds < rangeStart) { setRangeEnd(rangeStart); setRangeStart(ds) }
+      else { setRangeEnd(ds) }
+    }
+  }
+
+  function inRange(ds: string) {
+    const end = rangeEnd || hovered || ""
+    if (!rangeStart) return false
+    const lo = rangeStart < end ? rangeStart : end
+    const hi = rangeStart < end ? end : rangeStart
+    return ds >= lo && ds <= hi
+  }
+
+  function CalendarMonth({ base }: { base: Date }) {
+    const year = base.getFullYear(), month = base.getMonth()
+    const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
+    const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"]
+    const firstDay = new Date(year, month, 1).getDay()
+    const total = daysInMonth(year, month)
+    const cells: (number|null)[] = Array(firstDay).fill(null)
+    for (let d = 1; d <= total; d++) cells.push(d)
+    while (cells.length % 7 !== 0) cells.push(null)
+
+    const YEARS = Array.from({length: 10}, (_,i) => now.getFullYear() - 4 + i)
+
+    return (
+      <div style={{width:220}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+          <select value={MONTHS[month]} onChange={e=>{const m=MONTHS.indexOf(e.target.value);setLeftMonth(new Date(year,base===leftMonth?m:m-1,1))}}
+            style={{fontSize:13,fontWeight:700,border:"none",background:"transparent",cursor:"pointer",fontFamily:"inherit",color:"#1c1e21",padding:"2px 4px"}}>
+            {MONTHS.map(m=><option key={m}>{m}</option>)}
+          </select>
+          <select value={year} onChange={e=>{const y=Number(e.target.value);setLeftMonth(new Date(y,base===leftMonth?month:month-1,1))}}
+            style={{fontSize:13,fontWeight:700,border:"none",background:"transparent",cursor:"pointer",fontFamily:"inherit",color:"#1c1e21",padding:"2px 4px"}}>
+            {YEARS.map(y=><option key={y}>{y}</option>)}
+          </select>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:1,marginBottom:4}}>
+          {DAYS.map(d=><div key={d} style={{textAlign:"center",fontSize:11,color:"#65676b",fontWeight:600,padding:"4px 0"}}>{d}</div>)}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:1}}>
+          {cells.map((d,i)=>{
+            if (!d) return <div key={i}/>
+            const ds = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`
+            const isStart = ds===rangeStart, isEnd = ds===rangeEnd || (!rangeEnd&&ds===hovered&&ds!==rangeStart)
+            const inR = inRange(ds)
+            const bg = isStart||isEnd?"#1877f2":inR?"#e7f0fd":"transparent"
+            const col = isStart||isEnd?"#fff":inR?"#1877f2":"#1c1e21"
+            return (
+              <div key={i} onClick={()=>handleDayClick(ds)} onMouseEnter={()=>setHovered(ds)} onMouseLeave={()=>setHovered(null)}
+                style={{textAlign:"center",fontSize:13,padding:"5px 2px",borderRadius:4,background:bg,color:col,cursor:"pointer",userSelect:"none",fontWeight:isStart||isEnd?700:400}}>
+                {d}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  const displayLabel = activePreset || (rangeStart && rangeEnd ? `${rangeStart} – ${rangeEnd}` : rangeStart || "Select dates")
+  const applyLabel = activePreset || (rangeStart && rangeEnd ? `${rangeStart} – ${rangeEnd}` : rangeStart || "")
+
+  return (
+    <div style={{position:"fixed" as const,inset:0,zIndex:9999,display:"flex",alignItems:"flex-start",justifyContent:"center",paddingTop:80}} onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
+      <div style={{background:"#fff",borderRadius:8,boxShadow:"0 8px 32px rgba(0,0,0,.2)",display:"flex",overflow:"hidden",minWidth:680,maxWidth:860}}>
+        {/* Left: presets */}
+        <div style={{width:180,borderRight:"1px solid #e4e6ea",padding:"16px 0"}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#65676b",letterSpacing:".07em",textTransform:"uppercase" as const,padding:"0 16px 10px"}}>Recently used</div>
+          {FB_PRESETS.map(p=>(
+            <div key={p} onClick={()=>selectPreset(p)}
+              style={{padding:"8px 16px",fontSize:13,cursor:"pointer",color:activePreset===p?"#1877f2":"#1c1e21",fontWeight:activePreset===p?600:400,background:activePreset===p?"#e7f0fd":"transparent"}}>
+              {p}
+            </div>
+          ))}
+        </div>
+        {/* Right: calendars + controls */}
+        <div style={{flex:1,padding:"16px 20px"}}>
+          <div style={{display:"flex",gap:24,marginBottom:16}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:0}}>
+              <button onClick={()=>setLeftMonth(addMonths(leftMonth,-1))} style={{border:"none",background:"none",cursor:"pointer",fontSize:16,color:"#65676b",padding:"2px 6px",borderRadius:4}}>‹</button>
+              <CalendarMonth base={leftMonth}/>
+              <div style={{width:1,background:"#e4e6ea",alignSelf:"stretch"}}/>
+              <CalendarMonth base={rightMonth}/>
+              <button onClick={()=>setLeftMonth(addMonths(leftMonth,1))} style={{border:"none",background:"none",cursor:"pointer",fontSize:16,color:"#65676b",padding:"2px 6px",borderRadius:4}}>›</button>
+            </div>
+          </div>
+          {/* Compare */}
+          <div style={{borderTop:"1px solid #e4e6ea",paddingTop:12,marginBottom:12}}>
+            <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,cursor:"pointer",userSelect:"none" as const,color:"#1c1e21",fontWeight:500}}>
+              <input type="checkbox" checked={compareOn} onChange={e=>setCompareOn(e.target.checked)} style={{accentColor:"#1877f2",width:14,height:14}}/>
+              Compare
+            </label>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,fontSize:12,color:"#65676b"}}>
+            <select defaultValue="Custom" style={{fontSize:12,border:"1px solid #ccd0d5",borderRadius:4,padding:"4px 8px",fontFamily:"inherit",color:"#1c1e21",background:"#fff"}}>
+              <option>Custom</option><option>Previous period</option><option>Previous year</option>
+            </select>
+            <span style={{color:"#1877f2",fontWeight:500}}>{rangeStart ? new Date(rangeStart+"T00:00:00").toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"}) : "–"}</span>
+            <span>–</span>
+            <span style={{color:"#1877f2",fontWeight:500}}>{(rangeEnd||rangeStart) ? new Date((rangeEnd||rangeStart)+"T00:00:00").toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"}) : "–"}</span>
+          </div>
+          <div style={{fontSize:11,color:"#65676b",marginBottom:14}}>Dates are shown in Copenhagen Time</div>
+          <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+            <button onClick={onClose} style={{padding:"7px 18px",fontSize:13,border:"1px solid #ccd0d5",borderRadius:6,background:"#fff",color:"#1c1e21",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>Cancel</button>
+            <button onClick={()=>onApply(applyLabel, rangeStart, rangeEnd||rangeStart)}
+              style={{padding:"7px 18px",fontSize:13,fontWeight:600,border:"none",borderRadius:6,background:"#1877f2",color:"#fff",cursor:"pointer",fontFamily:"inherit"}}>Update</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function DashboardInner() {
   const { data: session, status } = useSession()
   const router = useRouter()
@@ -295,6 +471,18 @@ function DashboardInner() {
   const [compassCompareFrom, setCompassCompareFrom] = useState<string>(() => _toDateStr(_prevMonthStart()))
   const [compassCompareTo,   setCompassCompareTo]   = useState<string>(() => _toDateStr(_prevMonthEnd()))
   const [compassPickerOpen, setCompassPickerOpen] = useState<boolean>(false)
+  const [compassSubTab, setCompassSubTab] = useState<string>("investment")
+  const [compassOverviewSection, setCompassOverviewSection] = useState<string>("vaekstkapital")
+  const [expandedConsultant, setExpandedConsultant] = useState<string|null>(null)
+  const [compassMonth, setCompassMonth] = useState<string>(()=>{const n=new Date();return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}`})
+  const [compassConsultantsOpen, setCompassConsultantsOpen] = useState<boolean>(false)
+  const [compassManagersOpen, setCompassManagersOpen] = useState<boolean>(false)
+  const [investPickerOpen, setInvestPickerOpen] = useState<boolean>(false)
+  const [investDateLabel, setInvestDateLabel] = useState<string>("This month")
+  const [consOutcomesPickerOpen, setConsOutcomesPickerOpen] = useState<boolean>(false)
+  const [consOutcomesLabel, setConsOutcomesLabel] = useState<string>("This month")
+  const [mgrMeetingPickerOpen, setMgrMeetingPickerOpen] = useState<boolean>(false)
+  const [mgrMeetingLabel, setMgrMeetingLabel] = useState<string>("This month")
   // Section 1 — Deals Closed (filters by close date)
   const [c1From, setC1From]         = useState<string>(_ytdFrom)
   const [c1To, setC1To]             = useState<string>(_ytdTo)
@@ -3434,402 +3622,757 @@ function DashboardInner() {
           ]
 
           return (
-            <div style={{background:C_PAGE,minHeight:"60vh",padding:"24px 28px 60px",fontFamily:"inherit"}}>
+            <div style={{fontFamily:"inherit",minHeight:"60vh",background:C_PAGE}}>
 
-              {/* ── Header + controls ─────────────────────────────────── */}
-              <div style={{marginBottom:20}}>
-                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:12,marginBottom:14}}>
-                  <div>
-                    <div style={{fontSize:20,fontWeight:700,color:C_INK,letterSpacing:"-.01em"}}>Compass · Vaekstnet</div>
-                    <div style={{fontSize:12,color:C_MUTED,marginTop:3}}>Sales activity overview</div>
-                  </div>
-
-                  {/* Date range picker button */}
-                  <div style={{position:"relative" as const}}>
-                    <button onClick={() => setCompassPickerOpen(v => !v)}
-                      style={{display:"flex",alignItems:"center",gap:8,padding:"7px 14px",fontSize:12,fontWeight:500,border:`1px solid ${C_BDR}`,borderRadius:6,background:C_BG,color:C_INK,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap" as const}}>
-                      <span>📅</span>
-                      <span>{primaryMon?.label ?? compassFrom}</span>
-                      {compareMon && <><span style={{color:C_MUTED}}>vs</span><span style={{color:C_MUTED}}>{compareMon.label}</span></>}
-                      <span style={{color:C_MUTED,fontSize:10}}>▼</span>
-                    </button>
-
-                    {/* Picker dropdown */}
-                    {compassPickerOpen && (
-                      <div style={{position:"absolute" as const,top:"calc(100% + 6px)",right:0,zIndex:200,background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.12)",padding:"20px 20px 16px",minWidth:320}}>
-                        <div style={{fontSize:11,fontWeight:700,color:C_MUTED,letterSpacing:".07em",textTransform:"uppercase" as const,marginBottom:12}}>Select Period</div>
-
-                        <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:16}}>
-                          <div style={{flex:1}}>
-                            <div style={{fontSize:11,color:C_MUTED,marginBottom:4}}>From</div>
-                            <input type="date" value={compassFrom} onChange={e => setCompassFrom(e.target.value)}
-                              style={{width:"100%",padding:"6px 8px",fontSize:12,border:`1px solid ${C_BDR}`,borderRadius:6,fontFamily:"inherit",color:C_INK,background:C_BG,boxSizing:"border-box" as const}} />
-                          </div>
-                          <div style={{paddingTop:18,color:C_MUTED}}>→</div>
-                          <div style={{flex:1}}>
-                            <div style={{fontSize:11,color:C_MUTED,marginBottom:4}}>To</div>
-                            <input type="date" value={compassTo} onChange={e => setCompassTo(e.target.value)}
-                              style={{width:"100%",padding:"6px 8px",fontSize:12,border:`1px solid ${C_BDR}`,borderRadius:6,fontFamily:"inherit",color:C_INK,background:C_BG,boxSizing:"border-box" as const}} />
-                          </div>
-                        </div>
-
-                        <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:C_INK2,cursor:"pointer",userSelect:"none" as const,marginBottom:compassCompareOn?12:16}}>
-                          <input type="checkbox" checked={compassCompareOn} onChange={e => setCompassCompareOn(e.target.checked)}
-                            style={{accentColor:C_SEL,width:14,height:14,cursor:"pointer"}} />
-                          Compare to another period
-                        </label>
-
-                        {compassCompareOn && (
-                          <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:16,paddingLeft:22}}>
-                            <div style={{flex:1}}>
-                              <div style={{fontSize:11,color:C_MUTED,marginBottom:4}}>Compare from</div>
-                              <input type="date" value={compassCompareFrom} onChange={e => setCompassCompareFrom(e.target.value)}
-                                style={{width:"100%",padding:"6px 8px",fontSize:12,border:`1px solid ${C_BDR}`,borderRadius:6,fontFamily:"inherit",color:C_INK,background:C_BG,boxSizing:"border-box" as const}} />
-                            </div>
-                            <div style={{paddingTop:18,color:C_MUTED}}>→</div>
-                            <div style={{flex:1}}>
-                              <div style={{fontSize:11,color:C_MUTED,marginBottom:4}}>Compare to</div>
-                              <input type="date" value={compassCompareTo} onChange={e => setCompassCompareTo(e.target.value)}
-                                style={{width:"100%",padding:"6px 8px",fontSize:12,border:`1px solid ${C_BDR}`,borderRadius:6,fontFamily:"inherit",color:C_INK,background:C_BG,boxSizing:"border-box" as const}} />
-                            </div>
-                          </div>
-                        )}
-
-                        <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-                          <button onClick={() => setCompassPickerOpen(false)}
-                            style={{padding:"7px 14px",fontSize:12,border:`1px solid ${C_BDR}`,borderRadius:6,background:"transparent",color:C_MUTED,cursor:"pointer",fontFamily:"inherit"}}>
-                            Cancel
-                          </button>
-                          <button onClick={() => { setCompassPickerOpen(false); fetchCompass(compassFrom, compassTo, compassCompareOn, compassCompareFrom, compassCompareTo) }}
-                            style={{padding:"7px 18px",fontSize:12,fontWeight:600,border:"none",borderRadius:6,background:C_SEL,color:"#fff",cursor:"pointer",fontFamily:"inherit"}}>
-                            Load data
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Person filter */}
-                <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                  <div style={{position:"relative" as const,flex:"0 0 260px"}}>
-                    <input
-                      type="text"
-                      placeholder="Search person…"
-                      value={compassPersonFilter}
-                      onChange={e => setCompassPersonFilter(e.target.value)}
-                      style={{width:"100%",padding:"7px 32px 7px 10px",fontSize:12,border:`1px solid ${C_BDR}`,borderRadius:6,fontFamily:"inherit",color:C_INK,background:C_BG,outline:"none",boxSizing:"border-box" as const}}
-                    />
-                    {compassPersonFilter && (
-                      <button onClick={() => setCompassPersonFilter("")}
-                        style={{position:"absolute" as const,right:8,top:"50%",transform:"translateY(-50%)",border:"none",background:"none",cursor:"pointer",color:C_MUTED,fontSize:14,lineHeight:1,padding:0}}>
-                        ×
+              <div style={{padding:"28px 28px 60px"}}>
+                  <div style={{maxWidth:1100,margin:"0 auto"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:28,flexWrap:"wrap" as const,gap:12}}>
+                      <h2 style={{fontSize:22,fontWeight:700,color:C_INK,margin:0,letterSpacing:"-.01em"}}>
+                        Investment 2026
+                      </h2>
+                      <button onClick={()=>setInvestPickerOpen(v=>!v)}
+                        style={{display:"flex",alignItems:"center",gap:8,padding:"7px 14px",fontSize:12,fontWeight:500,border:`1px solid ${C_BDR}`,borderRadius:6,background:C_BG,color:C_INK,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap" as const}}>
+                        <span>📅</span>
+                        <span>{investDateLabel}</span>
+                        <span style={{color:C_MUTED,fontSize:10}}>▼</span>
                       </button>
-                    )}
-                  </div>
-                  {/* Country quick-filter */}
-                  {(["all","dk","se"] as const).map(f => (
-                    <button key={f}
-                      onClick={() => setCompassData((d: any) => ({...d, _countryFilter: f}))}
-                      style={{padding:"6px 14px",fontSize:12,fontWeight:600,border:`1px solid ${C_BDR}`,borderRadius:6,cursor:"pointer",fontFamily:"inherit",
-                        background:(compassData._countryFilter??"all")===f ? C_INK : C_BG,
-                        color:(compassData._countryFilter??"all")===f ? "#fff" : C_INK2}}>
-                      {f === "all" ? "All" : f === "dk" ? "🇩🇰 Denmark" : "🇸🇪 Sweden"}
-                    </button>
-                  ))}
-                  {(compassPersonFilter || (compassData._countryFilter && compassData._countryFilter !== "all")) && (
-                    <button onClick={() => { setCompassPersonFilter(""); setCompassData((d: any) => ({...d, _countryFilter:"all"})) }}
-                      style={{padding:"6px 12px",fontSize:12,color:C_MUTED,border:`1px solid ${C_BDR}`,borderRadius:6,cursor:"pointer",background:C_BG,fontFamily:"inherit"}}>
-                      Clear filters
-                    </button>
-                  )}
-                </div>
-              </div>
+                      {investPickerOpen && <FBDatePicker onApply={(lbl,start,end)=>{setInvestDateLabel(lbl);setInvestPickerOpen(false);setCompassFrom(start);setCompassTo(end);fetchCompass(start,end,false,"","")}} onClose={()=>setInvestPickerOpen(false)}/>}
+                    </div>
+                    <div style={{background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:8,padding:"28px 32px",marginBottom:28,maxWidth:860}}>
+                      {(()=>{
+                        const [selYear,selMon]=compassMonth.split("-").map(Number)
+                        const today2=new Date()
+                        const isCurrentMonth=selYear===today2.getFullYear()&&selMon===(today2.getMonth()+1)
+                        const daysInMonth2=new Date(selYear,selMon,0).getDate()
+                        const timePct2=isCurrentMonth?Math.round(today2.getDate()/daysInMonth2*100):100
+                        const Bar=({label,current,goal,currency,color}:{label:string,current:number,goal:number,currency:string,color:string})=>(
+                          <div style={{marginBottom:24}}>
+                            <div style={{fontSize:14,fontWeight:500,color:C_INK2,marginBottom:10}}>{label}</div>
+                            <div style={{height:36,background:C_BDR2,borderRadius:18,overflow:"hidden",position:"relative" as const}}>
+                              <div style={{width:`${Math.min(100,Math.round(current/goal*100))}%`,height:"100%",background:color,borderRadius:18}}/>
+                              {isCurrentMonth&&<div style={{position:"absolute" as const,left:`${timePct2}%`,top:0,bottom:0,width:2,background:"#111",opacity:.5}}/>}
+                            </div>
+                            <div style={{display:"flex",justifyContent:"space-between",marginTop:6}}>
+                              <span style={{fontSize:13,fontWeight:700,color:C_INK}}>{current} M{currency}</span>
+                              <span style={{fontSize:13,fontWeight:700,color:C_MUTED}}>{goal} M{currency}</span>
+                            </div>
+                          </div>
+                        )
+                        return(<>
+                          <Bar label="This month - DK" current={Math.round(safe(primaryMon?.summary?.dk?.dealValue)/1_000_000)} goal={150} currency="DKK" color={C_DK}/>
+                          <Bar label="This month - SE" current={Math.round(safe(primaryMon?.summary?.se?.dealValue)/1_000_000)} goal={50} currency="SEK" color={C_SE}/>
+                        </>)
+                      })()}
+                    </div>
 
-              {/* ── OVERVIEW ────────────────────────────────────────────── */}
-              {sectionTitle("Sales Activity Overview")}
-              {card(
-                <table style={{width:"100%",borderCollapse:"collapse"}}>
-                  <thead>
-                    <tr>
-                      <th style={{...TH,minWidth:180}}>Metric</th>
-                      {COUNTRIES.map(c => (
-                        <React.Fragment key={c.key}>
-                          <th style={{...THr,color:c.color,borderLeft:`2px solid ${C_BDR}`}}>{c.label}</th>
-                          {compareMon && <th style={{...THr,color:C_MUTED,fontStyle:"italic" as const,fontSize:10}}>vs {compareMon.label}</th>}
-                        </React.Fragment>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {METRICS.map((m, ri) => (
-                      <tr key={m.key} style={{background: ri%2===0 ? C_BG : C_BDR2}}>
-                        <td style={{...TD,color:C_INK,fontWeight:500}}>
-                          {m.label}
-                        </td>
-                        {COUNTRIES.map(c => {
-                          const ccy = m.key === "dealValue" ? (c.key === "dk" ? " DKK" : " SEK") : ""
-                          const fmtWithCcy = (v: any) => { const s = m.fmt(safe(v)); return s === "—" ? s : s + ccy }
-                          return (
-                            <React.Fragment key={c.key}>
-                              <td style={{...TDr,borderLeft:`2px solid ${C_BDR}`,fontWeight:600}}>
-                                {valCell(primaryMon.summary?.[c.key]?.[m.key], compareMon ? compareMon.summary?.[c.key]?.[m.key] : null, fmtWithCcy, m.currency)}
-                              </td>
-                              {compareMon && (
-                                <td style={{...TDr,color:C_MUTED,fontSize:12}}>{fmtWithCcy(compareMon.summary?.[c.key]?.[m.key])}</td>
+                    <div style={{fontSize:11,fontWeight:700,letterSpacing:".07em",textTransform:"uppercase" as const,color:C_MUTED,marginBottom:8,marginTop:8}}>Vaekstkapital Overview</div>
+                    <div style={{background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:8,overflowX:"auto" as const,marginBottom:16}}>
+                      <table style={{width:"100%",borderCollapse:"collapse" as const}}>
+                        <thead><tr>
+                          <th style={{...TH,minWidth:140}}>Overview</th>
+                          <th style={TH}>Database value</th>
+                          {["Meetings booked","Meeting quality %","Total investment","Reinvestment","%","New investments","%"].map((h,j)=>(
+                            <th key={j} style={{...THr,fontStyle:h==="Reinvestment"||h==="New investments"?"italic" as const:undefined}}>{h}</th>
+                          ))}
+                        </tr></thead>
+                        <tbody>
+                          {([["Denmark",primaryMon?.summary?.dk],["Sweden",primaryMon?.summary?.se]] as const).map(([r,s],i)=>{
+                            const dkPpl=primaryMon?.people?.filter((p:any)=>p.country==="dk")||[]
+                            const sePpl=primaryMon?.people?.filter((p:any)=>p.country==="se")||[]
+                            const ppl=r==="Denmark"?dkPpl:sePpl
+                            const sumCalls=ppl.reduce((a:number,p:any)=>a+safe(p.totalCalls),0)
+                            const sumQM=ppl.reduce((a:number,p:any)=>a+safe(p.qualityMeetings),0)
+                            return(
+                              <tr key={r} style={{background:i%2===0?C_BG:C_BDR2}}>
+                                <td style={TD}>{r}</td>
+                                <td style={{...TD,color:C_MUTED,fontStyle:"italic" as const}}>—</td>
+                                <td style={TDr}>{fmtN(safe(s?.qualityMeetings))}</td>
+                                <td style={TDr}>{pctS(sumQM,sumCalls)}</td>
+                                <td style={{...TDr,fontWeight:600}}>{fmtN(safe(s?.totalInvestment)/1_000_000)}M</td>
+                                <td style={TDr}>{fmtN(safe(s?.reinvestment)/1_000_000)}M</td>
+                                <td style={TDr}>{pctS(safe(s?.reinvestment),safe(s?.totalInvestment))}</td>
+                                <td style={TDr}>{fmtN(safe(s?.newInvestments)/1_000_000)}M</td>
+                                <td style={TDr}>{pctS(safe(s?.newInvestments),safe(s?.totalInvestment))}</td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div style={{fontSize:11,fontWeight:700,letterSpacing:".07em",textTransform:"uppercase" as const,color:C_MUTED,marginBottom:8,marginTop:24}}>AUC (VaekstNet platform)</div>
+                    {(()=>{
+                      const aD=compassData.auc
+                      const fmtM=(v:number)=>v>=1_000_000?`${(v/1_000_000).toFixed(1)}M`:`${(v/1_000).toFixed(0)}k`
+                      const listed=aD?(aD.total-aD.vkFunds-aD.cash):0
+                      return(
+                      <div style={{background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:8,overflowX:"auto" as const,marginBottom:16,maxWidth:440}}>
+                        <table style={{width:"100%",borderCollapse:"collapse" as const}}>
+                          <thead><tr>
+                            <th style={TH}>AUC</th><th style={THr}>New</th><th style={THr}>Total</th>
+                          </tr></thead>
+                          <tbody>
+                            {([["Cash",aD?.cash],["VK Funds",aD?.vkFunds],["Securities",listed]] as const).map(([r,v]:any,i:number)=>(
+                              <tr key={r} style={{background:i%2===0?C_BG:C_BDR2}}>
+                                <td style={TD}>{r}</td>
+                                <td style={{...TDr,color:C_MUTED,fontStyle:"italic" as const}}>—</td>
+                                <td style={{...TDr,fontWeight:600}}>{v!=null?fmtM(v):"—"}</td>
+                              </tr>
+                            ))}
+                            <tr style={{background:C_HEAD}}>
+                              <td style={{...TD,fontWeight:700,color:C_INK}}>Total</td>
+                              <td style={{...TDr,fontWeight:700,color:C_INK}}></td>
+                              <td style={{...TDr,fontWeight:700,color:C_INK}}>{aD?fmtM(aD.total):"—"}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      )
+                    })()}
+
+                    <div style={{marginTop:32,background:"#121428",borderRadius:12,padding:"28px 32px",marginBottom:24}}>
+                      <div style={{fontSize:18,fontWeight:700,color:"#fff",marginBottom:20}}>More dashboards</div>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16}}>
+                        {(["vaekstkapital","vaekstnet","all"] as const).map(key=>(
+                          <button key={key} onClick={()=>setCompassOverviewSection(key)}
+                            style={{background:compassOverviewSection===key?"rgba(167,139,250,.18)":"#fff",
+                              border:compassOverviewSection===key?"2px solid #a78bfa":"2px solid transparent",
+                              borderRadius:12,padding:"32px 16px",fontSize:14,fontWeight:700,
+                              color:compassOverviewSection===key?"#e9d5ff":C_INK,cursor:"pointer",fontFamily:"inherit",textAlign:"center" as const}}>
+                            {key==="vaekstkapital"?"Vaekstkapital":key==="vaekstnet"?"VaekstNet":"All funds"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {compassOverviewSection==="vaekstkapital" && (<>
+                      {/* Overview by Country */}
+                      <div style={{fontSize:11,fontWeight:700,letterSpacing:".07em",textTransform:"uppercase" as const,color:C_MUTED,marginBottom:8,marginTop:8}}>Overview by Country</div>
+                      <div style={{background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:8,overflowX:"auto" as const,marginBottom:16}}>
+                        <table style={{width:"100%",borderCollapse:"collapse" as const}}>
+                          <thead><tr>
+                            {["Overview","Database value","Meetings booked","Meeting quality %","Total Investment","Reinvestments","New Investments"].map((h,j)=>(
+                              <th key={j} style={{...j===0?TH:THr,fontStyle:j>=5?"italic" as const:undefined}}>{h}</th>
+                            ))}
+                          </tr></thead>
+                          <tbody>
+                            {([["Denmark","dk"],["Sweden","se"],["Austria",null],["Norway",null],["Finland",null]] as const).map(([r,key],i)=>{
+                              const s=key?primaryMon?.summary?.[key]:null
+                              const ppl=key?(primaryMon?.people?.filter((p:any)=>p.country===key)||[]):[]
+                              const sumCalls=ppl.reduce((a:number,p:any)=>a+safe(p.totalCalls),0)
+                              const sumQM=ppl.reduce((a:number,p:any)=>a+safe(p.qualityMeetings),0)
+                              return(
+                                <tr key={r} style={{background:i%2===0?C_BG:C_BDR2}}>
+                                  <td style={TD}>{r}</td>
+                                  <td style={{...TD,color:C_MUTED,fontStyle:"italic" as const}}>—</td>
+                                  <td style={TDr}>{s?fmtN(safe(s.qualityMeetings)):""}</td>
+                                  <td style={TDr}>{s?pctS(sumQM,sumCalls):""}</td>
+                                  <td style={{...TDr,fontWeight:s?600:undefined}}>{s?`${fmtN(safe(s.totalInvestment)/1_000_000)}M`:""}</td>
+                                  <td style={TDr}>{s?`${fmtN(safe(s.reinvestment)/1_000_000)}M`:""}</td>
+                                  <td style={TDr}>{s?`${fmtN(safe(s.newInvestments)/1_000_000)}M`:""}</td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      {/* Meeting Source — placeholder */}
+                      <div style={{fontSize:11,fontWeight:700,letterSpacing:".07em",textTransform:"uppercase" as const,color:C_MUTED,marginBottom:8,marginTop:8}}>Meeting Source</div>
+                      <div style={{background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:8,overflowX:"auto" as const,marginBottom:16}}>
+                        <table style={{width:"100%",borderCollapse:"collapse" as const}}>
+                          <thead><tr>
+                            <th style={TH}>Meeting Source</th>
+                            {["Denmark Total","Denmark %","Sweden Total","Sweden %"].map((h,j)=>(<th key={j} style={THr}>{h}</th>))}
+                          </tr></thead>
+                          <tbody>
+                            {["Telemarketing","Marketing","VaekstNet","Other"].map((r,i)=>(
+                              <tr key={r} style={{background:i%2===0?C_BG:C_BDR2}}>
+                                <td style={TD}>{r}</td>
+                                {Array(4).fill(null).map((_,j)=><td key={j} style={TDr}></td>)}
+                              </tr>
+                            ))}
+                            <tr style={{background:C_HEAD}}>
+                              <td style={{...TD,fontWeight:700,color:C_INK}}>Total</td>
+                              {Array(4).fill(null).map((_,j)=><td key={j} style={{...TDr,fontWeight:700,color:C_INK}}></td>)}
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Investment Source — real attribution data */}
+                      {(()=>{
+                        const da=primaryMon?.attribution?.dk
+                        const sa=primaryMon?.attribution?.se
+                        const dkTot=safe(da?.new)+safe(da?.vaekstnet)+safe(da?.existingInvestor)
+                        const seTot=safe(sa?.new)+safe(sa?.vaekstnet)+safe(sa?.existingInvestor)
+                        const rows=[
+                          ["New investor", da?.new, sa?.new],
+                          ["VaekstNet", da?.vaekstnet, sa?.vaekstnet],
+                          ["Existing investor", da?.existingInvestor, sa?.existingInvestor],
+                        ] as const
+                        return(
+                          <>
+                          <div style={{fontSize:11,fontWeight:700,letterSpacing:".07em",textTransform:"uppercase" as const,color:C_MUTED,marginBottom:8,marginTop:24}}>Investment Source</div>
+                          <div style={{background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:8,overflowX:"auto" as const,marginBottom:16}}>
+                            <table style={{width:"100%",borderCollapse:"collapse" as const}}>
+                              <thead><tr>
+                                <th style={TH}>Investment Source</th>
+                                {["Denmark Total","Denmark %","Sweden Total","Sweden %"].map((h,j)=>(<th key={j} style={THr}>{h}</th>))}
+                              </tr></thead>
+                              <tbody>
+                                {rows.map(([r,dv,sv],i)=>(
+                                  <tr key={r} style={{background:i%2===0?C_BG:C_BDR2}}>
+                                    <td style={TD}>{r}</td>
+                                    <td style={TDr}>{fmtN(safe(dv)/1_000_000)}M</td>
+                                    <td style={TDr}>{pctS(safe(dv),dkTot)}</td>
+                                    <td style={TDr}>{fmtN(safe(sv)/1_000_000)}M</td>
+                                    <td style={TDr}>{pctS(safe(sv),seTot)}</td>
+                                  </tr>
+                                ))}
+                                <tr style={{background:C_HEAD}}>
+                                  <td style={{...TD,fontWeight:700,color:C_INK}}>Total</td>
+                                  <td style={{...TDr,fontWeight:700,color:C_INK}}>{fmtN(dkTot/1_000_000)}M</td>
+                                  <td style={{...TDr,fontWeight:700,color:C_INK}}>100%</td>
+                                  <td style={{...TDr,fontWeight:700,color:C_INK}}>{fmtN(seTot/1_000_000)}M</td>
+                                  <td style={{...TDr,fontWeight:700,color:C_INK}}>100%</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                          </>
+                        )
+                      })()}
+
+                      {/* Investment Consultants — collapsible */}
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:32,marginBottom:16,cursor:"pointer" as const,borderTop:`1px solid ${C_BDR}`,paddingTop:24}} onClick={()=>setCompassConsultantsOpen(v=>!v)}>
+                        <h3 style={{fontSize:18,fontWeight:700,color:C_INK,margin:0,display:"flex",alignItems:"center",gap:10}}>
+                          <span style={{fontSize:12,color:C_MUTED,userSelect:"none" as const}}>{compassConsultantsOpen?"▼":"▶"}</span>
+                          Investment consultants
+                        </h3>
+                        <span style={{fontSize:12,color:C_DK,fontWeight:600}}>{compassConsultantsOpen?"Collapse":"Expand"}</span>
+                      </div>
+                      {compassConsultantsOpen && (()=>{
+                        const allCons=(primaryMon?.people||[]).filter((p:any)=>p.role==="consultant")
+                        const dkCons=allCons.filter((p:any)=>p.country==="dk")
+                        const seCons=allCons.filter((p:any)=>p.country==="se")
+                        const ConsRow=({p,bg}:{p:any,bg:string})=>{
+                          const qPct=pctS(safe(p.qualityMeetings),safe(p.totalCalls))
+                          return(
+                            <React.Fragment>
+                              <tr style={{background:bg,cursor:"pointer" as const}} onClick={()=>setExpandedConsultant(expandedConsultant===p.name?null:p.name)}>
+                                <td style={{...TD,color:C_INK,fontWeight:500}}><span style={{fontSize:10,color:C_MUTED,marginRight:6,userSelect:"none" as const}}>{expandedConsultant===p.name?"▼":"▶"}</span>{p.name}</td>
+                                <td style={TDr}></td><td style={TDr}></td>
+                                <td style={{...TDr,fontWeight:600}}>{fmtN(safe(p.totalCalls))}</td>
+                                <td style={TDr}>{p.avgCallMinutes?`${Number(p.avgCallMinutes).toFixed(1)} min`:"—"}</td>
+                                <td style={TDr}>{fmtN(safe(p.qualityMeetings))}</td>
+                                <td style={TDr}>{qPct}</td>
+                                <td style={{...TDr,fontWeight:600}}>{safe(p.wonDeals)?fmtN(safe(p.wonDeals)):"—"}</td>
+                              </tr>
+                              {expandedConsultant===p.name&&(
+                                <tr>
+                                  <td colSpan={8} style={{padding:"14px 24px",background:C_BDR2}}>
+                                    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16}}>
+                                      {[["Won amount",safe(p.wonAmount)?`${fmtN(safe(p.wonAmount)/1_000_000)}M`:"—"],["New investments",fmtN(safe(p.newInvestments))],["Reinvestment",`${fmtN(safe(p.reinvestment)/1_000_000)}M`]].map(([lbl,val])=>(
+                                        <div key={lbl} style={{background:C_BG,borderRadius:6,padding:"10px 14px",border:`1px solid ${C_BDR}`}}>
+                                          <div style={{fontSize:10,color:C_MUTED,fontWeight:600,letterSpacing:".06em",textTransform:"uppercase" as const,marginBottom:4}}>{lbl}</div>
+                                          <div style={{fontSize:16,fontWeight:700,color:C_INK}}>{val}</div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </td>
+                                </tr>
                               )}
                             </React.Fragment>
                           )
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+                        }
+                        const avgRow=(ppl:any[])=>{
+                          if(!ppl.length)return null
+                          const avgCalls=Math.round(ppl.reduce((a:number,p:any)=>a+safe(p.totalCalls),0)/ppl.length)
+                          const avgQM=Math.round(ppl.reduce((a:number,p:any)=>a+safe(p.qualityMeetings),0)/ppl.length)
+                          const sumCalls=ppl.reduce((a:number,p:any)=>a+safe(p.totalCalls),0)
+                          const sumQM=ppl.reduce((a:number,p:any)=>a+safe(p.qualityMeetings),0)
+                          return(<tr style={{background:C_HEAD}}><td style={{...TD,fontWeight:700,color:C_INK}}>Average / Total</td><td style={TDr}></td><td style={TDr}></td><td style={{...TDr,color:C_MUTED}}>{avgCalls}</td><td style={TDr}></td><td style={{...TDr,color:C_MUTED}}>{avgQM}</td><td style={{...TDr,color:C_MUTED}}>{pctS(sumQM,sumCalls)}</td><td style={TDr}></td></tr>)
+                        }
+                        return(<>
+                          <div style={{background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:8,overflowX:"auto" as const,marginBottom:16}}>
+                            <table style={{width:"100%",borderCollapse:"collapse" as const}}>
+                              <thead>
+                                <tr>
+                                  <th style={{...TH,minWidth:200}}>Investment consultants</th>
+                                  <th style={THr} colSpan={2}>Database</th>
+                                  <th style={THr}>Total calls</th><th style={THr}>Avg. call (min)</th>
+                                  <th style={THr}>Quality meetings</th><th style={THr}>Quality %</th>
+                                  <th style={THr}>Won deals</th>
+                                </tr>
+                                <tr>
+                                  <th style={{...TH,borderTop:"none"}}></th>
+                                  <th style={{...THr,borderTop:"none",fontSize:10}}>Contacts</th>
+                                  <th style={{...THr,borderTop:"none",fontSize:10}}>Leads received</th>
+                                  {Array(5).fill(null).map((_,j)=><th key={j} style={{...THr,borderTop:"none"}}></th>)}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr><td colSpan={8} style={{...TD,background:C_HEAD,color:C_DK,fontWeight:700,fontSize:11,letterSpacing:".05em",textTransform:"uppercase" as const,padding:"8px 14px",borderBottom:`1px solid ${C_BDR}`}}>Denmark</td></tr>
+                                {dkCons.length?dkCons.map((p:any,i:number)=><ConsRow key={p.name} p={p} bg={i%2===0?C_BG:C_BDR2}/>):<tr><td colSpan={8} style={{...TD,color:C_MUTED,fontStyle:"italic" as const}}>No data</td></tr>}
+                                {avgRow(dkCons)}
+                                <tr><td colSpan={8} style={{...TD,background:C_HEAD,color:C_SE,fontWeight:700,fontSize:11,letterSpacing:".05em",textTransform:"uppercase" as const,padding:"8px 14px",borderTop:`2px solid ${C_BDR}`,borderBottom:`1px solid ${C_BDR}`}}>Sweden</td></tr>
+                                {seCons.length?seCons.map((p:any,i:number)=><ConsRow key={p.name} p={p} bg={i%2===0?C_BG:C_BDR2}/>):<tr><td colSpan={8} style={{...TD,color:C_MUTED,fontStyle:"italic" as const}}>No data</td></tr>}
+                                {avgRow(seCons)}
+                              </tbody>
+                            </table>
+                          </div>
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:16,marginBottom:6}}>
+                            <div style={{fontSize:11,fontWeight:700,letterSpacing:".07em",textTransform:"uppercase" as const,color:C_MUTED}}>Call outcomes</div>
+                            <button onClick={()=>setConsOutcomesPickerOpen(v=>!v)}
+                              style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",fontSize:11,fontWeight:500,border:`1px solid ${C_BDR}`,borderRadius:6,background:C_BG,color:C_INK,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap" as const}}>
+                              <span>📅</span><span>{consOutcomesLabel}</span><span style={{color:C_MUTED,fontSize:9}}>▼</span>
+                            </button>
+                            {consOutcomesPickerOpen && <FBDatePicker onApply={(lbl)=>{setConsOutcomesLabel(lbl);setConsOutcomesPickerOpen(false)}} onClose={()=>setConsOutcomesPickerOpen(false)}/>}
+                          </div>
+                          <div style={{background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:8,overflowX:"auto" as const,marginBottom:16}}>
+                            <table style={{width:"100%",borderCollapse:"collapse" as const}}>
+                              <thead><tr style={{background:"#1e2235"}}>
+                                {["Market","Total calls","Voice-mail","%","Not relevant","%","Relevant, but not interested","%","Follow-up","%","Meeting set","%"].map((h,j)=>(
+                                  <th key={j} style={{fontSize:11,fontWeight:600,padding:"10px 14px",textAlign:j===0?"left" as const:"right" as const,borderBottom:"1px solid rgba(255,255,255,.1)",background:"#1e2235",color:"#fff",whiteSpace:j===6?"normal" as const:"nowrap" as const,maxWidth:j===6?80:undefined}}>{h}</th>
+                                ))}
+                              </tr></thead>
+                              <tbody>
+                                {[{label:"Denmark",color:C_DK,bold:false},{label:"Sweden",color:C_SE,bold:false},{label:"Total",color:C_INK,bold:true}].map((r)=>(
+                                  <tr key={r.label} style={{background:"#fffbeb"}}>
+                                    <td style={{...TD,color:r.color,fontWeight:r.bold?700:400}}>{r.label}</td>
+                                    {Array(11).fill(null).map((_,j)=>(<td key={j} style={{...TDr,color:r.bold?C_INK:C_MUTED}}>{j%2===0?"0":"0.0%"}</td>))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </>)
+                      })()}
 
-              {/* ── ATTRIBUTION ─────────────────────────────────────────── */}
-              {sectionTitle("Attribution")}
-              {card(
-                <table style={{width:"100%",borderCollapse:"collapse"}}>
-                  <thead>
-                    <tr>
-                      <th style={{...TH,minWidth:160}}>Investment Source</th>
-                      {COUNTRIES.map(c => (
-                        <React.Fragment key={c.key}>
-                          <th style={{...THr,color:c.color,borderLeft:`2px solid ${C_BDR}`}}>{c.label} — count</th>
-                          <th style={{...THr,color:C_MUTED,fontSize:10}}>%</th>
-                          {compareMon && <th style={{...THr,color:C_MUTED,fontStyle:"italic" as const,fontSize:10}}>vs {compareMon.label}</th>}
-                        </React.Fragment>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(()=>{
-                      const pTotals = {dk: attrTotal(primaryMon.attribution.dk), se: attrTotal(primaryMon.attribution.se)}
-                      const cTotals = compareMon ? {dk: attrTotal(compareMon.attribution.dk), se: attrTotal(compareMon.attribution.se)} : null
-                      return (<>
-                        {ATTR_ROWS.map((row, ri) => (
-                          <tr key={row.key} style={{background: ri%2===0 ? C_BG : C_BDR2}}>
-                            <td style={{...TD,color:C_INK,fontWeight:500}}>{row.label}</td>
-                            {COUNTRIES.map(c => {
-                              const pv = safe(primaryMon.attribution[c.key][row.key])
-                              const cv = compareMon ? safe(compareMon.attribution[c.key][row.key]) : null
-                              return (
-                                <React.Fragment key={c.key}>
-                                  <td style={{...TDr,borderLeft:`2px solid ${C_BDR}`,fontWeight:600}}>{cell(pv)}</td>
-                                  <td style={{...TDr,color:C_MUTED,fontSize:12}}>{pctS(pv, pTotals[c.key])}</td>
-                                  {compareMon && <td style={{...TDr,color:C_MUTED,fontSize:12}}>{cell(cv)} <span style={{fontSize:10}}>{pctS(safe(cv), cTotals![c.key])}</span></td>}
-                                </React.Fragment>
-                              )
-                            })}
+                      {/* Investment Managers — collapsible */}
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:24,marginBottom:16,cursor:"pointer" as const,borderTop:`1px solid ${C_BDR}`,paddingTop:24}} onClick={()=>setCompassManagersOpen(v=>!v)}>
+                        <h3 style={{fontSize:18,fontWeight:700,color:C_INK,margin:0,display:"flex",alignItems:"center",gap:10}}>
+                          <span style={{fontSize:12,color:C_MUTED,userSelect:"none" as const}}>{compassManagersOpen?"▼":"▶"}</span>
+                          Investment managers &amp; directors
+                        </h3>
+                        <span style={{fontSize:12,color:C_DK,fontWeight:600}}>{compassManagersOpen?"Collapse":"Expand"}</span>
+                      </div>
+                      {compassManagersOpen && (()=>{
+                        const allMgrs=(primaryMon?.people||[]).filter((p:any)=>p.role==="manager"||p.role==="director")
+                        const dkMgrs=allMgrs.filter((p:any)=>p.country==="dk")
+                        const seMgrs=allMgrs.filter((p:any)=>p.country==="se")
+                        const MgrRow=({p,i}:{p:any,i:number})=>(
+                          <tr key={p.name} style={{background:i%2===0?C_BG:C_BDR2}}>
+                            <td style={{...TD,color:C_INK,fontWeight:500}}>{p.name}</td>
+                            <td style={TDr}></td><td style={TDr}></td>
+                            <td style={TDr}>{fmtN(safe(p.totalCalls))}</td>
+                            <td style={{...TDr,fontWeight:600}}>{fmtN(safe(p.qualityMeetings))}</td>
+                            <td style={TDr}></td><td style={TDr}></td>
+                            <td style={TDr}></td><td style={TDr}></td>
+                            <td style={{...TDr,fontWeight:600}}>{safe(p.wonAmount)?`${fmtN(safe(p.wonAmount)/1_000_000)}M`:"—"}</td>
+                            <td style={TDr}>{safe(p.reinvestment)?`${fmtN(safe(p.reinvestment)/1_000_000)}M`:"—"}</td>
+                            <td style={TDr}>{pctS(safe(p.reinvestment),safe(p.wonAmount))}</td>
+                            <td style={TDr}>{safe(p.newInvestments)?`${fmtN(safe(p.newInvestments)/1_000_000)}M`:"—"}</td>
+                            <td style={TDr}>{pctS(safe(p.newInvestments),safe(p.wonAmount))}</td>
                           </tr>
-                        ))}
-                        <tr style={{background:C_HEAD,borderTop:`1px solid ${C_BDR}`}}>
-                          <td style={{...TD,fontWeight:700,color:C_INK}}>Total</td>
-                          {COUNTRIES.map(c => (
-                            <React.Fragment key={c.key}>
-                              <td style={{...TDr,fontWeight:700,color:C_INK,borderLeft:`2px solid ${C_BDR}`}}>{cell(pTotals[c.key])}</td>
-                              <td style={{...TDr,color:C_MUTED,fontSize:12}}>100%</td>
-                              {compareMon && <td style={{...TDr,fontWeight:600,color:C_MUTED,fontSize:12}}>{cell(cTotals![c.key])}</td>}
-                            </React.Fragment>
-                          ))}
-                        </tr>
-                      </>)
-                    })()}
-                  </tbody>
-                </table>
-              )}
+                        )
+                        const totalRow=(ppl:any[],ctry:string)=>{
+                          const tot=(k:string)=>ppl.reduce((a:number,p:any)=>a+safe(p[k]),0)
+                          return(<tr style={{background:C_HEAD}}>
+                            <td style={{...TD,fontWeight:700,color:C_INK}}>Total {ctry}</td>
+                            <td style={TDr}></td><td style={TDr}></td>
+                            <td style={{...TDr,fontWeight:700}}>{fmtN(tot("totalCalls"))}</td>
+                            <td style={{...TDr,fontWeight:700}}>{fmtN(tot("qualityMeetings"))}</td>
+                            <td style={TDr}></td><td style={TDr}></td><td style={TDr}></td><td style={TDr}></td>
+                            <td style={{...TDr,fontWeight:700}}>{fmtN(tot("wonAmount")/1_000_000)}M</td>
+                            <td style={{...TDr,fontWeight:700}}>{fmtN(tot("reinvestment")/1_000_000)}M</td>
+                            <td style={TDr}>{pctS(tot("reinvestment"),tot("wonAmount"))}</td>
+                            <td style={{...TDr,fontWeight:700}}>{fmtN(tot("newInvestments")/1_000_000)}M</td>
+                            <td style={TDr}>{pctS(tot("newInvestments"),tot("wonAmount"))}</td>
+                          </tr>)
+                        }
+                        return(<>
+                          <div style={{background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:8,overflowX:"auto" as const,marginBottom:16}}>
+                            <table style={{width:"100%",borderCollapse:"collapse" as const}}>
+                              <thead><tr>
+                                <th style={{...TH,minWidth:180}}>Investment managers &amp; directors</th>
+                                <th style={THr}>Contacts</th><th style={THr}>Investors</th><th style={THr}>Total calls</th>
+                                <th style={{...THr,fontWeight:700}}>Quality meetings</th>
+                                <th style={{...THr,fontStyle:"italic" as const}}>Meeting booked</th><th style={THr}>%</th>
+                                <th style={THr}>Meetings received</th><th style={THr}>%</th>
+                                <th style={{...THr,fontWeight:700}}>Total investment</th>
+                                <th style={{...THr,fontStyle:"italic" as const}}>Reinvestment</th><th style={THr}>%</th>
+                                <th style={{...THr,fontStyle:"italic" as const}}>New investment</th><th style={THr}>%</th>
+                              </tr></thead>
+                              <tbody>
+                                <tr><td colSpan={14} style={{...TD,background:C_HEAD,color:C_DK,fontWeight:700,fontSize:11,letterSpacing:".05em",textTransform:"uppercase" as const,padding:"8px 14px",borderBottom:`1px solid ${C_BDR}`}}>Denmark</td></tr>
+                                {dkMgrs.length?dkMgrs.map((p:any,i:number)=><MgrRow key={p.name} p={p} i={i}/>):<tr><td colSpan={14} style={{...TD,color:C_MUTED,fontStyle:"italic" as const}}>No data</td></tr>}
+                                {dkMgrs.length>0&&totalRow(dkMgrs,"DK")}
+                                <tr><td colSpan={14} style={{...TD,background:C_HEAD,color:C_SE,fontWeight:700,fontSize:11,letterSpacing:".05em",textTransform:"uppercase" as const,padding:"8px 14px",borderTop:`2px solid ${C_BDR}`,borderBottom:`1px solid ${C_BDR}`}}>Sweden</td></tr>
+                                {seMgrs.length?seMgrs.map((p:any,i:number)=><MgrRow key={p.name} p={p} i={i}/>):<tr><td colSpan={14} style={{...TD,color:C_MUTED,fontStyle:"italic" as const}}>No data</td></tr>}
+                                {seMgrs.length>0&&totalRow(seMgrs,"SE")}
+                              </tbody>
+                            </table>
+                          </div>
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",margin:"28px 0 12px"}}>
+                            <h3 style={{fontSize:16,fontWeight:700,color:C_INK,margin:0}}>Meeting data</h3>
+                            <button onClick={()=>setMgrMeetingPickerOpen(v=>!v)}
+                              style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",fontSize:11,fontWeight:500,border:`1px solid ${C_BDR}`,borderRadius:6,background:C_BG,color:C_INK,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap" as const}}>
+                              <span>📅</span><span>{mgrMeetingLabel}</span><span style={{color:C_MUTED,fontSize:9}}>▼</span>
+                            </button>
+                            {mgrMeetingPickerOpen && <FBDatePicker onApply={(lbl)=>{setMgrMeetingLabel(lbl);setMgrMeetingPickerOpen(false)}} onClose={()=>setMgrMeetingPickerOpen(false)}/>}
+                          </div>
+                          <div style={{background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:8,overflowX:"auto" as const,marginBottom:24}}>
+                            <table style={{width:"100%",borderCollapse:"collapse" as const}}>
+                              <thead>
+                                <tr>
+                                  <th style={{...TH,minWidth:140}} colSpan={2}>Meetings data on new investors</th>
+                                  {["Disqualified","%","No show / Cancellation","%","Not interested","%","Not currently liquid","%","Interested","%","Deal sent","%","Deal Won","%"].map((h,j)=>(<th key={j} style={THr}>{h}</th>))}
+                                </tr>
+                                <tr>
+                                  <th style={{...TH,borderTop:"none"}}>Outcomes</th>
+                                  <th style={{...THr,borderTop:"none"}}>Total meetings</th>
+                                  <th style={{...THr,borderTop:"none"}}></th><th style={{...THr,borderTop:"none"}}></th>
+                                  <th style={{...THr,borderTop:"none",fontSize:9,color:"#92400e",background:"#fffbeb"}}>Input directly after the meeting</th>
+                                  {Array(11).fill(null).map((_,j)=><th key={j} style={{...THr,borderTop:"none"}}></th>)}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {["Denmark","Sweden"].map((r,i)=>(
+                                  <tr key={r} style={{background:i%2===0?C_BG:C_BDR2}}>
+                                    <td style={TD}>{r}</td>
+                                    {Array(15).fill(null).map((_,j)=><td key={j} style={TDr}></td>)}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </>)
+                      })()}
 
-              {/* ── INDIVIDUAL PERFORMANCE ──────────────────────────────── */}
-              {sectionTitle("Individual Performance")}
-              {(()=>{
-                // Build merged people list, apply filters
-                const allNames = [...new Set([
-                  ...(primaryMon.people as any[]).map((p:any)=>p.name),
-                  ...(compareMon ? (compareMon.people as any[]).map((p:any)=>p.name) : []),
-                ])]
-                const blank = {qualityMeetings:0,totalCalls:0,avgCallMinutes:0,wonDeals:0,wonAmount:0,newInvestments:0,reinvestment:0,country:"other",teamName:"",role:"other"}
-                const byName = (mon: any, name: string) =>
-                  (mon.people as any[]).find((p:any)=>p.name===name) ?? blank
-                const pMap: Record<string,any> = {}
-                ;(primaryMon.people as any[]).forEach((p:any)=>{pMap[p.name]=p})
+                      {/* ── Vaekstkapital Analytics ─────────────────────────── */}
+                      <div style={{borderTop:`1px solid ${C_BDR}`,paddingTop:28,marginTop:16}}>
+                        <div style={{fontSize:11,fontWeight:700,letterSpacing:".07em",textTransform:"uppercase" as const,color:C_MUTED,marginBottom:16}}>Investor analytics</div>
 
-                const ctryF = compassData._countryFilter ?? "all"
-                const nameF = compassPersonFilter.trim().toLowerCase()
-
-                const filtered = allNames.filter(name => {
-                  const p = pMap[name] ?? byName(compareMon ?? primaryMon, name)
-                  if (ctryF !== "all" && p.country !== ctryF) return false
-                  if (nameF && !name.toLowerCase().includes(nameF)) return false
-                  return true
-                }).sort((a,b)=>{
-                  const ra=pMap[a]?.role??"other", rb=pMap[b]?.role??"other"
-                  const ca=pMap[a]?.country??"other", cb=pMap[b]?.country??"other"
-                  const roleOrder = (r:string) => r==="consultant"?0:r==="manager"?1:r==="director"?2:3
-                  const ctryOrder = (c:string) => c==="dk"?0:c==="se"?1:2
-                  if (ctryOrder(ca)!==ctryOrder(cb)) return ctryOrder(ca)-ctryOrder(cb)
-                  if (roleOrder(ra)!==roleOrder(rb)) return roleOrder(ra)-roleOrder(rb)
-                  return a.localeCompare(b)
-                })
-
-                // Role sections config: role key → {label, input cols, output cols}
-                type RoleSec = {role:string, label:string, inputCols:{key:string,label:string}[], outputCols:{key:string,label:string}[]}
-                const ROLE_SECTIONS: RoleSec[] = [
-                  {
-                    role:"consultant",
-                    label:"Investment Consultants",
-                    inputCols:[
-                      {key:"totalCalls",      label:"Total Calls"},
-                      {key:"avgCallMinutes",  label:"Avg. Call (min)"},
-                      {key:"qualityMeetings", label:"Quality Meetings"},
-                    ],
-                    outputCols:[
-                      {key:"pctQuality",      label:"% Quality Meetings"},
-                      {key:"wonDeals",        label:"Total Investments"},
-                      {key:"newInvestments",  label:"New Investments"},
-                      {key:"reinvestment",    label:"Reinvestment"},
-                      {key:"convRate",        label:"Conv. Rate (Mtg→Inv)"},
-                    ],
-                  },
-                  {
-                    role:"manager",
-                    label:"Investment Managers",
-                    inputCols:[
-                      {key:"totalCalls",      label:"Total Calls"},
-                      {key:"avgCallMinutes",  label:"Avg. Call (min)"},
-                      {key:"qualityMeetings", label:"Quality Meetings"},
-                    ],
-                    outputCols:[
-                      {key:"wonDeals",        label:"Investments"},
-                      {key:"newInvestments",  label:"New Investments"},
-                      {key:"reinvestment",    label:"Reinvestment"},
-                      {key:"totalInvestment", label:"Total Investment"},
-                      {key:"convRate",        label:"Conv. Rate (Mtg→Inv)"},
-                    ],
-                  },
-                  {
-                    role:"director",
-                    label:"Investment Directors",
-                    inputCols:[
-                      {key:"qualityMeetings", label:"Quality Meetings"},
-                    ],
-                    outputCols:[
-                      {key:"wonDeals",        label:"Total Investments"},
-                      {key:"newInvestments",  label:"New Investments"},
-                      {key:"reinvestment",    label:"Reinvestments"},
-                      {key:"convRate",        label:"Conv. Rate (Mtg→Inv)"},
-                    ],
-                  },
-                  {
-                    role:"other",
-                    label:"Other",
-                    inputCols:[
-                      {key:"totalCalls",      label:"Total Calls"},
-                      {key:"qualityMeetings", label:"Quality Meetings"},
-                    ],
-                    outputCols:[
-                      {key:"wonDeals",        label:"Won Deals"},
-                      {key:"convRate",        label:"Conv. Rate"},
-                    ],
-                  },
-                ]
-
-                const getVal = (p: any, key: string): number => {
-                  if (!p) return 0
-                  if (key === "pctQuality")    return pct(safe(p.qualityMeetings), safe(p.totalCalls))
-                  if (key === "convRate")       return pct(safe(p.wonDeals), safe(p.qualityMeetings))
-                  if (key === "totalInvestment") return safe(p.newInvestments) + safe(p.reinvestment)
-                  const v = safe(p[key])
-                  return isNaN(v) ? 0 : v
-                }
-                const fmtVal = (p: any, key: string): string => {
-                  const v = getVal(p, key)
-                  if (!isFinite(v) || isNaN(v)) return "—"
-                  if (key === "avgCallMinutes") return v > 0 ? `${v} min` : "—"
-                  if (key === "pctQuality" || key === "convRate") return v > 0 ? `${v}%` : "—"
-                  return v > 0 ? String(v) : "—"
-                }
-
-                return ROLE_SECTIONS.map(sec => {
-                  const secPeople = filtered.filter(name => (pMap[name]?.role ?? "other") === sec.role)
-                  if (secPeople.length === 0) return null
-                  const allCols = [...sec.inputCols, ...sec.outputCols]
-                  const totalCols = 2 + allCols.length + (compareMon ? allCols.length : 0)
-
-                  return (
-                    <div key={sec.role} style={{marginBottom:16}}>
-                      <div style={{fontSize:12,fontWeight:700,color:C_INK,marginBottom:6,paddingLeft:2}}>{sec.label}</div>
-                      {card(
-                        <table style={{width:"100%",borderCollapse:"collapse"}}>
-                          <thead>
-                            <tr>
-                              <th style={{...TH,minWidth:160}} rowSpan={2}>Name</th>
-                              <th style={{...TH,minWidth:100}} rowSpan={2}>Country</th>
-                              <th colSpan={sec.inputCols.length + (compareMon ? sec.inputCols.length : 0)}
-                                style={{...THc,borderLeft:`2px solid ${C_BDR}`,borderBottom:`1px solid ${C_BDR}`,color:C_MUTED,fontSize:9,letterSpacing:".08em"}}>INPUT</th>
-                              <th colSpan={sec.outputCols.length + (compareMon ? sec.outputCols.length : 0)}
-                                style={{...THc,borderLeft:`2px solid ${C_BDR}`,borderBottom:`1px solid ${C_BDR}`,color:C_DK,fontSize:9,letterSpacing:".08em"}}>OUTPUT</th>
-                            </tr>
-                            <tr>
-                              {sec.inputCols.map((c,i) => (
-                                <React.Fragment key={c.key}>
-                                  <th style={{...THr,borderLeft:i===0?`2px solid ${C_BDR}`:"none"}}>{c.label}</th>
-                                  {compareMon && <th style={{...THr,color:C_MUTED,fontSize:10,fontStyle:"italic" as const}}>prev</th>}
-                                </React.Fragment>
-                              ))}
-                              {sec.outputCols.map((c,i) => (
-                                <React.Fragment key={c.key}>
-                                  <th style={{...THr,borderLeft:i===0?`2px solid ${C_BDR}`:"none"}}>{c.label}</th>
-                                  {compareMon && <th style={{...THr,color:C_MUTED,fontSize:10,fontStyle:"italic" as const}}>prev</th>}
-                                </React.Fragment>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(()=>{
-                              let lastCtry2 = ""
-                              return secPeople.map((name, ri) => {
-                                const pP = byName(primaryMon, name)
-                                const cP = compareMon ? byName(compareMon, name) : null
-                                const ctry = pP.country ?? "other"
-                                const showGrp2 = ctry !== lastCtry2
-                                if (showGrp2) lastCtry2 = ctry
-                                return (
-                                  <React.Fragment key={name}>
-                                    {showGrp2 && (
-                                      <tr>
-                                        <td colSpan={totalCols} style={{...TD,background:C_HEAD,color:ctry==="dk"?C_DK:ctry==="se"?C_SE:C_MUTED,fontWeight:700,fontSize:10,letterSpacing:".05em",textTransform:"uppercase" as const,padding:"7px 14px",borderBottom:`1px solid ${C_BDR}`}}>
-                                          {ctry==="dk"?"Denmark":ctry==="se"?"Sweden":"Other"}
+                        {/* LTI Cohort */}
+                        <h3 style={{fontSize:16,fontWeight:700,color:C_INK,margin:"0 0 12px"}}>Life time investment cohort</h3>
+                        <div style={{fontSize:11,color:C_MUTED,marginBottom:10}}>Each row = customers acquired in that quarter. Q0 = acquisition quarter, Q1 = one quarter later, etc. Cell value = number of deals from that cohort in that quarter offset.</div>
+                        {(()=>{
+                          const cohort=(compassData.ltiCohort||[]) as Array<{quarter:string;customers:number;deals:number[];amounts:number[]}>
+                          const maxDeals=Math.max(1,...cohort.flatMap(r=>r.deals))
+                          return(
+                          <div style={{background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:8,overflowX:"auto" as const,marginBottom:28}}>
+                            <table style={{width:"100%",borderCollapse:"collapse" as const}}>
+                              <thead><tr style={{background:C_HEAD}}>
+                                <th style={{...TH,minWidth:130}}>Acquisition quarter</th>
+                                <th style={THr}>Customers</th>
+                                {Array(16).fill(null).map((_,j)=>(
+                                  <th key={j} style={{...THr,fontSize:10,color:C_MUTED}}>Q+{j}</th>
+                                ))}
+                              </tr></thead>
+                              <tbody>
+                                {cohort.map((row,i)=>(
+                                  <tr key={row.quarter} style={{background:i%2===0?C_BG:C_BDR2}}>
+                                    <td style={{...TD,fontWeight:600}}>{row.quarter}</td>
+                                    <td style={{...TDr,fontWeight:700,color:C_DK}}>{row.customers||""}</td>
+                                    {row.deals.map((d,j)=>{
+                                      const intensity=d>0?Math.min(d/maxDeals,1):0
+                                      return(
+                                        <td key={j} title={d>0?`${d} deals · ${fmtN(Math.round((row.amounts[j]||0)/1_000_000))}M DKK`:""}
+                                          style={{...TDr,background:d>0?`rgba(29,78,216,${(intensity*0.35+0.05).toFixed(2)})`:"",color:intensity>0.5?"#fff":d>0?C_DK:"",fontWeight:d>0?600:undefined,fontSize:11}}>
+                                          {d>0?d:""}
                                         </td>
-                                      </tr>
-                                    )}
-                                    <tr style={{background:ri%2===0?C_BG:C_BDR2}}>
-                                      <td style={{...TD,color:C_INK,fontWeight:500}}>{name}</td>
-                                      <td style={{...TD,color:C_MUTED,fontSize:11}}>{pP.teamName||"—"}</td>
-                                      {sec.inputCols.map((c,i) => (
-                                        <React.Fragment key={c.key}>
-                                          <td style={{...TDr,borderLeft:i===0?`2px solid ${C_BDR}`:"none"}}>{fmtVal(pP,c.key)}</td>
-                                          {compareMon && <td style={{...TDr,color:C_MUTED,fontSize:11}}>{fmtVal(cP!,c.key)}</td>}
-                                        </React.Fragment>
-                                      ))}
-                                      {sec.outputCols.map((c,i) => (
-                                        <React.Fragment key={c.key}>
-                                          <td style={{...TDr,borderLeft:i===0?`2px solid ${C_BDR}`:"none",fontWeight:600,color:C_INK}}>{fmtVal(pP,c.key)}</td>
-                                          {compareMon && <td style={{...TDr,color:C_MUTED,fontSize:11}}>{fmtVal(cP!,c.key)}</td>}
-                                        </React.Fragment>
-                                      ))}
-                                    </tr>
-                                  </React.Fragment>
-                                )
-                              })
-                            })()}
+                                      )
+                                    })}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                          )
+                        })()}
+
+                        {/* Value to Cost — by grade */}
+                        <h3 style={{fontSize:16,fontWeight:700,color:C_INK,margin:"0 0 6px"}}>Value to cost, by grade</h3>
+                        <div style={{fontSize:11,color:C_MUTED,marginBottom:10}}>Grade = wealth tier. LTI = raw investment total, Vaekstkapital only.</div>
+                        <div style={{background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:8,overflowX:"auto" as const,marginBottom:24}}>
+                          <table style={{width:"100%",borderCollapse:"collapse" as const}}>
+                            <thead><tr>
+                              <th style={TH}>Grade</th>
+                              {["Meetings held","Deal Won (invested)","Close rate %","Marketing cost","Consultant cost","Meeting cost","Events cost","Tour cost","Total cost","LTI1","Cost ratio 1","LTI12","Cost ratio 12","LTI24","Cost ratio 24"].map((h,j)=>(
+                                <th key={j} style={THr}>{h}</th>
+                              ))}
+                            </tr></thead>
+                            <tbody>
+                              {["EXAMPLE","Grade A","Grade B","Grade C","Grade D","Total"].map((r,i)=>(
+                                <tr key={r} style={{background:r==="Total"?C_HEAD:i%2===0?C_BG:C_BDR2}}>
+                                  <td style={{...TD,fontWeight:r==="Total"?700:400,color:r==="EXAMPLE"?"#92400e":r==="Total"?C_INK:C_INK}}>{r}</td>
+                                  {Array(15).fill(null).map((_,j)=><td key={j} style={{...TDr,fontWeight:r==="Total"?700:400}}></td>)}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Value to Cost — by source */}
+                        <h3 style={{fontSize:16,fontWeight:700,color:C_INK,margin:"0 0 6px"}}>Value to cost, by source</h3>
+                        <div style={{background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:8,overflowX:"auto" as const,marginBottom:24}}>
+                          <table style={{width:"100%",borderCollapse:"collapse" as const}}>
+                            <thead><tr>
+                              <th style={TH}>Source</th>
+                              {["Meetings held","Deal Won (invested)","Close rate %","Marketing cost","Consultant cost","Meeting cost","Events cost","Tour cost","Total cost","LTI1","Cost ratio 1","LTI12","Cost ratio 12","LTI24","Cost ratio 24"].map((h,j)=>(
+                                <th key={j} style={THr}>{h}</th>
+                              ))}
+                            </tr></thead>
+                            <tbody>
+                              {["EXAMPLE","Cold calling","Marketing","VaekstNet","Reinvesting","Total"].map((r,i)=>(
+                                <tr key={r} style={{background:r==="Total"?C_HEAD:i%2===0?C_BG:C_BDR2}}>
+                                  <td style={{...TD,fontWeight:r==="Total"?700:400,color:r==="EXAMPLE"?"#92400e":C_INK}}>{r}</td>
+                                  {Array(15).fill(null).map((_,j)=><td key={j} style={{...TDr,fontWeight:r==="Total"?700:400}}></td>)}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Value to Cost — by tour participant */}
+                        <h3 style={{fontSize:16,fontWeight:700,color:C_INK,margin:"0 0 6px"}}>Value to cost, by tour participant</h3>
+                        <div style={{background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:8,overflowX:"auto" as const,marginBottom:24}}>
+                          <table style={{width:"100%",borderCollapse:"collapse" as const}}>
+                            <thead><tr>
+                              <th style={TH}>Age group</th>
+                              {["Meetings held","Deal Won (invested)","Close rate %","Marketing cost","Consultant cost","Meeting cost","Events cost","Tour cost","Total cost","LTI1","Cost ratio 1","LTI12","Cost ratio 12","LTI24","Cost ratio 24"].map((h,j)=>(
+                                <th key={j} style={THr}>{h}</th>
+                              ))}
+                            </tr></thead>
+                            <tbody>
+                              {["EXAMPLE","<35","35-44","45-54","55-64","65+","Total"].map((r,i)=>(
+                                <tr key={r} style={{background:r==="Total"?C_HEAD:i%2===0?C_BG:C_BDR2}}>
+                                  <td style={{...TD,fontWeight:r==="Total"?700:400,color:r==="EXAMPLE"?"#92400e":C_INK}}>{r}</td>
+                                  {Array(15).fill(null).map((_,j)=><td key={j} style={{...TDr,fontWeight:r==="Total"?700:400}}></td>)}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Value to Cost — by meeting type */}
+                        <h3 style={{fontSize:16,fontWeight:700,color:C_INK,margin:"0 0 6px"}}>Value to cost, by meeting type</h3>
+                        <div style={{background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:8,overflowX:"auto" as const,marginBottom:24}}>
+                          <table style={{width:"100%",borderCollapse:"collapse" as const}}>
+                            <thead><tr>
+                              <th style={TH}>Meeting type</th>
+                              {["Meetings held","Deal Won (invested)","Close rate %","Marketing cost","Consultant cost","Meeting cost","Events cost","Tour cost","Total cost","LTI1","Cost ratio 1","LTI12","Cost ratio 12","LTI24","Cost ratio 24"].map((h,j)=>(
+                                <th key={j} style={THr}>{h}</th>
+                              ))}
+                            </tr></thead>
+                            <tbody>
+                              {["EXAMPLE","Online","Physical (at office)","Physical (away)","Total"].map((r,i)=>(
+                                <tr key={r} style={{background:r==="Total"?C_HEAD:i%2===0?C_BG:C_BDR2}}>
+                                  <td style={{...TD,fontWeight:r==="Total"?700:400,color:r==="EXAMPLE"?"#92400e":C_INK}}>{r}</td>
+                                  {Array(15).fill(null).map((_,j)=><td key={j} style={{...TDr,fontWeight:r==="Total"?700:400}}></td>)}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Investor profile */}
+                        <h3 style={{fontSize:16,fontWeight:700,color:C_INK,margin:"0 0 6px"}}>Investor profile &amp; data</h3>
+                        <div style={{fontSize:11,fontWeight:700,color:C_MUTED,letterSpacing:".05em",marginBottom:8}}>Age / Demographics</div>
+                        <div style={{background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:8,overflowX:"auto" as const,marginBottom:16,maxWidth:560}}>
+                          <table style={{width:"100%",borderCollapse:"collapse" as const}}>
+                            <thead><tr>
+                              <th style={TH}>Age group</th><th style={THr}>Count</th><th style={THr}>% of total</th><th style={THr}>Investment volume</th><th style={THr}>% of total</th><th style={THr}>LTI1</th><th style={THr}>LTI12</th>
+                            </tr></thead>
+                            <tbody>
+                              {["<35","35-44","45-54","55-64","65+"].map((r,i)=>(
+                                <tr key={r} style={{background:i%2===0?C_BG:C_BDR2}}>
+                                  <td style={TD}>{r}</td>{Array(6).fill(null).map((_,j)=><td key={j} style={TDr}></td>)}
+                                </tr>
+                              ))}
+                              <tr style={{background:C_HEAD}}><td style={{...TD,fontWeight:700}}>Total</td>{Array(6).fill(null).map((_,j)=><td key={j} style={{...TDr,fontWeight:700}}></td>)}</tr>
+                            </tbody>
+                          </table>
+                        </div>
+                        <div style={{fontSize:11,fontWeight:700,color:C_MUTED,letterSpacing:".05em",marginBottom:8,marginTop:16}}>Reinvestment rate (12-month)</div>
+                        <div style={{background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:8,overflowX:"auto" as const,marginBottom:16,maxWidth:400}}>
+                          <table style={{width:"100%",borderCollapse:"collapse" as const}}>
+                            <thead><tr>
+                              <th style={TH}>Grade</th><th style={THr}>First investors (cohort)</th><th style={THr}>Reinvested within 12mo</th><th style={THr}>Reinvestment rate %</th>
+                            </tr></thead>
+                            <tbody>
+                              {["Grade A","Grade B","Grade C","Grade D"].map((r,i)=>(
+                                <tr key={r} style={{background:i%2===0?C_BG:C_BDR2}}>
+                                  <td style={TD}>{r}</td>{Array(3).fill(null).map((_,j)=><td key={j} style={TDr}></td>)}
+                                </tr>
+                              ))}
+                              <tr style={{background:C_HEAD}}><td style={{...TD,fontWeight:700}}>Total</td>{Array(3).fill(null).map((_,j)=><td key={j} style={{...TDr,fontWeight:700}}></td>)}</tr>
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Converting rates to AIF */}
+                        <h3 style={{fontSize:16,fontWeight:700,color:C_INK,margin:"24px 0 6px"}}>Converting rates to AIF</h3>
+                        <div style={{background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:8,overflowX:"auto" as const,marginBottom:32,maxWidth:440}}>
+                          <table style={{width:"100%",borderCollapse:"collapse" as const}}>
+                            <thead><tr>
+                              <th style={TH}>Metric</th><th style={THr}>Count</th><th style={THr}>Rate %</th>
+                            </tr></thead>
+                            <tbody>
+                              {["Investors without AIF","Time from investor to investor with AIF (days)","Conversion rate"].map((r,i)=>(
+                                <tr key={r} style={{background:i%2===0?C_BG:C_BDR2}}>
+                                  <td style={TD}>{r}</td><td style={TDr}></td><td style={TDr}></td>
+                                </tr>
+                              ))}
+                              <tr style={{background:C_HEAD}}><td style={{...TD,fontWeight:700}}>Total</td><td style={{...TDr,fontWeight:700}}></td><td style={{...TDr,fontWeight:700}}></td></tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </>)}
+
+                    {/* ── VaekstNet section ──────────────────────────────────── */}
+                    {compassOverviewSection==="vaekstnet" && (()=>{
+                      const aucD=compassData.auc
+                      const fmtM=(v:number)=>v>=1_000_000?`${(v/1_000_000).toFixed(1)}M`:`${(v/1_000).toFixed(0)}k`
+                      return(<>
+                      {/* Assets under custody */}
+                      <div style={{fontSize:11,fontWeight:700,letterSpacing:".07em",textTransform:"uppercase" as const,color:C_MUTED,marginBottom:8,marginTop:8}}>Assets under custody (AUC)</div>
+                      <div style={{fontSize:11,color:C_MUTED,marginBottom:10,fontStyle:"italic" as const}}>Total AUC across all VaekstNet investors (contacts + companies). "New" and "In transit" require period-aware data not yet available.</div>
+                      <div style={{background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:8,overflowX:"auto" as const,marginBottom:24,maxWidth:520}}>
+                        <table style={{width:"100%",borderCollapse:"collapse" as const}}>
+                          <thead><tr>
+                            <th style={TH}>Category</th><th style={THr}>New</th><th style={THr}>In transit</th><th style={THr}>Total</th>
+                          </tr></thead>
+                          <tbody>
+                            {([["Cash", aucD?.cash ?? null],["VK Funds", aucD?.vkFunds ?? null],["Securities (listed)", aucD ? Math.max(0, aucD.total - aucD.vkFunds - aucD.cash) : null]] as const).map(([r,v]:any,i:number)=>(
+                              <tr key={r} style={{background:i%2===0?C_BG:C_BDR2}}>
+                                <td style={TD}>{r}</td>
+                                <td style={{...TDr,color:C_MUTED,fontStyle:"italic" as const}}>—</td>
+                                <td style={{...TDr,color:C_MUTED,fontStyle:"italic" as const}}>—</td>
+                                <td style={{...TDr,fontWeight:600}}>{v!=null?fmtM(v):"—"}</td>
+                              </tr>
+                            ))}
+                            <tr style={{background:C_HEAD}}>
+                              <td style={{...TD,fontWeight:700}}>Total</td>
+                              <td style={{...TDr}}></td><td style={{...TDr}}></td>
+                              <td style={{...TDr,fontWeight:700,color:C_INK}}>{aucD?fmtM(aucD.total):"—"}</td>
+                            </tr>
                           </tbody>
                         </table>
-                      , 0)}
-                    </div>
-                  )
-                })
-              })()}
+                      </div>
+
+                      {/* Investors on platform */}
+                      <div style={{fontSize:11,fontWeight:700,letterSpacing:".07em",textTransform:"uppercase" as const,color:C_MUTED,marginBottom:8,marginTop:24}}>Investors on the platform</div>
+                      <div style={{background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:8,overflowX:"auto" as const,marginBottom:24,maxWidth:480}}>
+                        <table style={{width:"100%",borderCollapse:"collapse" as const}}>
+                          <thead><tr>
+                            <th style={TH}>Category</th><th style={THr}>Count</th><th style={THr}>Volume</th><th style={THr}>Conversion rate %</th>
+                          </tr></thead>
+                          <tbody>
+                            <tr style={{background:C_BG}}>
+                              <td style={TD}>VaekstNet app users (with AUC)</td>
+                              <td style={{...TDr,fontWeight:600}}>{fmtN(aucD?.investorsOnPlatform??0)}</td>
+                              <td style={TDr}>{aucD?fmtM(aucD.total):"—"}</td>
+                              <td style={TDr}></td>
+                            </tr>
+                            {["Good marketing contacts","Testing-fase","Investors (+5 mio)","Investor without AIF","Investor with AIF"].map((r,i)=>(
+                              <tr key={r} style={{background:(i+1)%2===0?C_BG:C_BDR2}}>
+                                <td style={TD}>{r}</td><td style={TDr}></td><td style={TDr}></td><td style={TDr}></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Top 25 investors */}
+                      <div style={{fontSize:11,fontWeight:700,letterSpacing:".07em",textTransform:"uppercase" as const,color:C_MUTED,marginBottom:8,marginTop:24}}>Top 25 investors — total AUC</div>
+                      <div style={{background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:8,overflowX:"auto" as const,marginBottom:24}}>
+                        <table style={{width:"100%",borderCollapse:"collapse" as const}}>
+                          <thead><tr>
+                            <th style={{...THr,textAlign:"left" as const,minWidth:32}}>Rank</th>
+                            <th style={{...TH,minWidth:180}}>Investor</th>
+                            <th style={THr}>Type</th>
+                            <th style={THr}>Consultant</th>
+                            <th style={{...THr,fontWeight:700}}>Total AUC</th>
+                            <th style={THr}>VK Funds</th>
+                            <th style={THr}>Cash</th>
+                          </tr></thead>
+                          <tbody>
+                            {(aucD?.top25||[]).map((c:any,i:number)=>(
+                              <tr key={i} style={{background:i%2===0?C_BG:C_BDR2}}>
+                                <td style={{...TDr,color:C_MUTED,fontWeight:600}}>{i+1}</td>
+                                <td style={{...TD,fontWeight:500}}>{c.name}</td>
+                                <td style={{...TDr,color:C_MUTED,fontSize:11}}>{c.type}</td>
+                                <td style={{...TDr,color:C_MUTED,fontSize:11}}>{c.consultant}</td>
+                                <td style={{...TDr,fontWeight:700,color:C_INK}}>{fmtM(c.totalAuc)}</td>
+                                <td style={TDr}>{fmtM(c.vkFunds)}</td>
+                                <td style={TDr}>{fmtM(c.cash)}</td>
+                              </tr>
+                            ))}
+                            {(!aucD?.top25?.length)&&<tr><td colSpan={7} style={{...TD,color:C_MUTED,fontStyle:"italic" as const}}>No AUC data — loading…</td></tr>}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Wealth managers */}
+                      <div style={{fontSize:11,fontWeight:700,letterSpacing:".07em",textTransform:"uppercase" as const,color:C_MUTED,marginBottom:8,marginTop:24}}>Wealth managers</div>
+                      <div style={{background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:8,overflowX:"auto" as const,marginBottom:24}}>
+                        <table style={{width:"100%",borderCollapse:"collapse" as const}}>
+                          <thead><tr>
+                            <th style={TH}>Name</th><th style={THr}>Contacts</th><th style={THr}>Investors</th><th style={THr}>New AUC</th><th style={THr}>Meeting set for AIF</th><th style={THr}>New AIF investments</th>
+                          </tr></thead>
+                          <tbody>
+                            {Array(4).fill("[Name]").map((n,i)=>(
+                              <tr key={i} style={{background:i%2===0?C_BG:C_BDR2}}>
+                                <td style={TD}>{n}</td>{Array(5).fill(null).map((_,j)=><td key={j} style={TDr}></td>)}
+                              </tr>
+                            ))}
+                            <tr style={{background:C_HEAD}}>
+                              <td style={{...TD,fontWeight:700}}>Total</td>{Array(5).fill(null).map((_,j)=><td key={j} style={{...TDr,fontWeight:700}}></td>)}
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Marketing / Performance ads */}
+                      <div style={{fontSize:11,fontWeight:700,letterSpacing:".07em",textTransform:"uppercase" as const,color:C_MUTED,marginBottom:8,marginTop:24}}>Marketing — performance ads</div>
+                      <div style={{background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:8,overflowX:"auto" as const,marginBottom:16}}>
+                        <table style={{width:"100%",borderCollapse:"collapse" as const}}>
+                          <thead><tr>
+                            <th style={TH}>Channel</th><th style={THr}>Spend</th><th style={THr}>Leads</th><th style={THr}>Cost per lead</th><th style={THr}>Testing-fase</th><th style={THr}>Cost per investor</th>
+                          </tr></thead>
+                          <tbody>
+                            {["Meta","Google","LinkedIn"].map((r,i)=>(
+                              <tr key={r} style={{background:i%2===0?C_BG:C_BDR2}}>
+                                <td style={TD}>{r}</td>{Array(5).fill(null).map((_,j)=><td key={j} style={TDr}></td>)}
+                              </tr>
+                            ))}
+                            <tr style={{background:C_HEAD}}>
+                              <td style={{...TD,fontWeight:700}}>Total</td>{Array(5).fill(null).map((_,j)=><td key={j} style={{...TDr,fontWeight:700}}></td>)}
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      <div style={{fontSize:11,fontWeight:700,letterSpacing:".07em",textTransform:"uppercase" as const,color:C_MUTED,marginBottom:8,marginTop:24}}>Lead output — reasons for not converting</div>
+                      <div style={{background:C_BG,border:`1px solid ${C_BDR}`,borderRadius:8,overflowX:"auto" as const,marginBottom:32,maxWidth:340}}>
+                        <table style={{width:"100%",borderCollapse:"collapse" as const}}>
+                          <thead><tr><th style={TH}>Reason</th><th style={THr}>Count</th><th style={THr}>% of total</th></tr></thead>
+                          <tbody>
+                            {["Disqualified","Bad timing","Not worth it","Features missing"].map((r,i)=>(
+                              <tr key={r} style={{background:i%2===0?C_BG:C_BDR2}}>
+                                <td style={TD}>{r}</td><td style={TDr}></td><td style={TDr}></td>
+                              </tr>
+                            ))}
+                            <tr style={{background:C_HEAD}}><td style={{...TD,fontWeight:700}}>Total</td><td style={{...TDr,fontWeight:700}}></td><td style={{...TDr,fontWeight:700}}></td></tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </>)
+                    })()}
+                  </div>
+                </div>
 
             </div>
           )
