@@ -5,19 +5,26 @@ const BASE = "https://api.hubapi.com"
 const KEY = process.env.HUBSPOT_API_KEY!
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
-// Match lists named like "BU DK - Webinar - Attended & replays ..."
-// Must have BU DK/SE prefix, contain "webinar", and contain "attended" or "replay".
-// Excludes the "Deals Won for Contacts who attended webinar" segment.
+// Match lists named like:
+//   "BU DK - Webinar 12.05.26 - Attended & replays"
+//   "DK - Webinar 19.08.25 attendees and replays"
+//   "DK - SR Webinar June 18 2025 - attendees and replays"
+// Must contain "webinar" + ("attended" or "replay"), exclude "deals won" segment.
 function isWebinarList(name: string): boolean {
   const lower = name.toLowerCase()
   if (!lower.includes("webinar")) return false
   if (lower.includes("deals won")) return false
   if (!lower.includes("attended") && !lower.includes("replay")) return false
-  return lower.startsWith("bu dk") || lower.startsWith("bu se")
+  return (
+    lower.startsWith("bu dk") || lower.startsWith("bu se") ||
+    lower.startsWith("dk -") || lower.startsWith("dk–") ||
+    lower.startsWith("se -") || lower.startsWith("se–")
+  )
 }
 
 function extractCountry(name: string): "DK" | "SE" {
-  return name.toLowerCase().startsWith("bu se") || name.toLowerCase().startsWith("se ") ? "SE" : "DK"
+  const lower = name.toLowerCase()
+  return lower.startsWith("bu se") || lower.startsWith("se -") || lower.startsWith("se–") ? "SE" : "DK"
 }
 
 // Danish + English month name → zero-padded month number
@@ -45,12 +52,20 @@ function parseEventDate(name: string, fallback: string): string {
   const d2 = name.match(/(\d{2})[./](\d{2})[./](\d{2})(?!\d)/)
   if (d2) return `20${d2[3]}-${d2[2]}-${d2[1]}`
 
-  // Try "Month YYYY"  e.g. "April 2026" / "Maj 2026"
   const keys = Object.keys(MONTHS).join("|")
-  const m = name.match(new RegExp(`\\b(${keys})\\b[^\\d]*(\\d{4})`, "i"))
-  if (m) {
-    const month = MONTHS[m[1].toLowerCase()]
-    if (month) return `${m[2]}-${month}-01`
+
+  // Try "Month D(D) YYYY" or "Month D(D), YYYY" e.g. "June 18 2025" / "May 22, 2025"
+  const mdy = name.match(new RegExp(`\\b(${keys})\\b\\s+(\\d{1,2}),?\\s+(\\d{4})`, "i"))
+  if (mdy) {
+    const month = MONTHS[mdy[1].toLowerCase()]
+    if (month) return `${mdy[3]}-${month}-${String(mdy[2]).padStart(2, "0")}`
+  }
+
+  // Try "Month YYYY" e.g. "April 2026" / "Maj 2026"
+  const my = name.match(new RegExp(`\\b(${keys})\\b[^\\d]*(\\d{4})`, "i"))
+  if (my) {
+    const month = MONTHS[my[1].toLowerCase()]
+    if (month) return `${my[2]}-${month}-01`
   }
 
   return (fallback || "").split("T")[0] || new Date().toISOString().split("T")[0]
@@ -108,6 +123,8 @@ export async function GET() {
   const searches = await Promise.allSettled([
     searchLists("BU DK - Webinar"),
     searchLists("BU SE - Webinar"),
+    searchLists("DK - Webinar"),
+    searchLists("SE - Webinar"),
   ])
 
   for (const result of searches) {
