@@ -5,17 +5,13 @@ const BASE = "https://api.hubapi.com"
 const KEY = process.env.HUBSPOT_API_KEY!
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
-// Match any list whose name contains "webinar" with a known BU/country prefix.
-// Excludes signup/registration lists.
+// Match lists named like "BU DK - Webinar - Attended & replays ..."
+// Must have BU DK/SE prefix, contain "webinar", and contain "attended".
 function isWebinarList(name: string): boolean {
   const lower = name.toLowerCase()
   if (!lower.includes("webinar")) return false
-  if (lower.includes("tilmeldte") || lower.includes("signup") || lower.includes("registration")) return false
-  return (
-    lower.startsWith("bu dk") || lower.startsWith("bu se") ||
-    lower.startsWith("dk -") || lower.startsWith("dk –") ||
-    lower.startsWith("se -") || lower.startsWith("se –")
-  )
+  if (!lower.includes("attended")) return false
+  return lower.startsWith("bu dk") || lower.startsWith("bu se")
 }
 
 function extractCountry(name: string): "DK" | "SE" {
@@ -108,8 +104,8 @@ export async function GET() {
   const errors: string[] = []
 
   const searches = await Promise.allSettled([
-    searchLists("webinar"),
-    searchLists("Webinar"),
+    searchLists("BU DK - Webinar - Attended"),
+    searchLists("BU SE - Webinar - Attended"),
   ])
 
   for (const result of searches) {

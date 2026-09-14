@@ -508,7 +508,7 @@ export default function SeminarsPage() {
           campaigns.length === 0 ? (
             <div style={{ background: "var(--card)", border: "1px solid var(--bdr)", borderRadius: 10, padding: "40px", textAlign: "center" }}>
               <div style={{ color: "var(--ink2)", fontSize: 13, marginBottom: 6 }}>No webinar lists found in HubSpot</div>
-              <div style={{ color: "var(--ink3)", fontSize: 11 }}>Searched for contact lists whose name contains "Webinar" with a BU DK / BU SE prefix</div>
+              <div style={{ color: "var(--ink3)", fontSize: 11 }}>Searched for lists named "BU DK - Webinar - Attended ..." and "BU SE - Webinar - Attended ..."</div>
               {error && <div style={{ color: "#b91c1c", fontSize: 11, marginTop: 8 }}>{error}</div>}
             </div>
           ) : (() => {
