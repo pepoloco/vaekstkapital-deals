@@ -6,11 +6,13 @@ const KEY = process.env.HUBSPOT_API_KEY!
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 // Match lists named like "BU DK - Webinar - Attended & replays ..."
-// Must have BU DK/SE prefix, contain "webinar", and contain "attended".
+// Must have BU DK/SE prefix, contain "webinar", and contain "attended" or "replay".
+// Excludes the "Deals Won for Contacts who attended webinar" segment.
 function isWebinarList(name: string): boolean {
   const lower = name.toLowerCase()
   if (!lower.includes("webinar")) return false
-  if (!lower.includes("attended")) return false
+  if (lower.includes("deals won")) return false
+  if (!lower.includes("attended") && !lower.includes("replay")) return false
   return lower.startsWith("bu dk") || lower.startsWith("bu se")
 }
 
@@ -104,8 +106,8 @@ export async function GET() {
   const errors: string[] = []
 
   const searches = await Promise.allSettled([
-    searchLists("BU DK - Webinar - Attended"),
-    searchLists("BU SE - Webinar - Attended"),
+    searchLists("BU DK - Webinar"),
+    searchLists("BU SE - Webinar"),
   ])
 
   for (const result of searches) {
