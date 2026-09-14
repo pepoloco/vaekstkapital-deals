@@ -14,6 +14,7 @@ function isWebinarList(name: string): boolean {
   const lower = name.toLowerCase()
   if (!lower.includes("webinar")) return false
   if (lower.includes("deals won")) return false
+  if (lower.includes("total")) return false
   if (!lower.includes("attended") && !lower.includes("replay")) return false
   return (
     lower.startsWith("bu dk") || lower.startsWith("bu se") ||
