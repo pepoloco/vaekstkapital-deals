@@ -4324,7 +4324,7 @@ function DashboardInner() {
                             <th style={TH}>Name</th><th style={THr}>Contacts</th><th style={THr}>Investors</th><th style={THr}>New AUC</th><th style={THr}>Meeting set for AIF</th><th style={THr}>New AIF investments</th>
                           </tr></thead>
                           <tbody>
-                            {Array(4).fill("[Name]").map((n,i)=>(
+                            {["Joakim Andersen"].map((n,i)=>(
                               <tr key={i} style={{background:i%2===0?C_BG:C_BDR2}}>
                                 <td style={TD}>{n}</td>{Array(5).fill(null).map((_,j)=><td key={j} style={TDr}></td>)}
                               </tr>
