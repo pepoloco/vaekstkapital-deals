@@ -134,7 +134,7 @@ export default function HubPage() {
                   </div>
                   <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.5 }}>{t.sub}</div>
                   {(t as any).underConstruction && (
-                    <div style={{ marginTop: 8, fontSize: 11, fontWeight: 700, color: "#dc2626", letterSpacing: ".02em" }}>🚧 Under construction</div>
+                    <div style={{ marginTop: 8, fontSize: 11, fontWeight: 700, color: "#dc2626", letterSpacing: ".02em" }}>Under construction</div>
                   )}
                   <div style={{ marginTop: 14 }}>
                     <span style={{ display: "inline-block", background: "#2563eb", color: "#fff", fontSize: 12, fontWeight: 600, padding: "6px 16px", borderRadius: 6 }}>Open</span>
