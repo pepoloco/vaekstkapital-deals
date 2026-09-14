@@ -4032,18 +4032,38 @@ function DashboardInner() {
                                 <tr>
                                   <th style={{...TH,borderTop:"none"}}>Outcomes</th>
                                   <th style={{...THr,borderTop:"none"}}>Total meetings</th>
-                                  <th style={{...THr,borderTop:"none"}}></th><th style={{...THr,borderTop:"none"}}></th>
-                                  <th style={{...THr,borderTop:"none",fontSize:9,color:"#92400e",background:"#fffbeb"}}>Input directly after the meeting</th>
-                                  {Array(11).fill(null).map((_,j)=><th key={j} style={{...THr,borderTop:"none"}}></th>)}
+                                  {Array(13).fill(null).map((_,j)=><th key={j} style={{...THr,borderTop:"none"}}></th>)}
                                 </tr>
                               </thead>
                               <tbody>
-                                {["Denmark","Sweden"].map((r,i)=>(
-                                  <tr key={r} style={{background:i%2===0?C_BG:C_BDR2}}>
-                                    <td style={TD}>{r}</td>
-                                    {Array(15).fill(null).map((_,j)=><td key={j} style={TDr}></td>)}
-                                  </tr>
-                                ))}
+                                {(()=>{
+                                  const mo=primaryMon?.meetingOutcomes
+                                  return([
+                                    {label:"Denmark", o:mo?.dk},
+                                    {label:"Sweden",  o:mo?.se},
+                                  ].map(({label:r,o},i)=>{
+                                    const tot=o?.total||0
+                                    const pct2=(n:number)=>tot>0?`${Math.round(n/tot*100)}%`:"—"
+                                    return(
+                                    <tr key={r} style={{background:i%2===0?C_BG:C_BDR2}}>
+                                      <td style={TD}>{r}</td>
+                                      <td style={{...TDr,fontWeight:600}}>{tot||"—"}</td>
+                                      <td style={TDr}>{o?.disqualified||"—"}</td>
+                                      <td style={{...TDr,color:C_MUTED,fontSize:11}}>{o?.disqualified?pct2(o.disqualified):"—"}</td>
+                                      <td style={TDr}>{o?.noShow||"—"}</td>
+                                      <td style={{...TDr,color:C_MUTED,fontSize:11}}>{o?.noShow?pct2(o.noShow):"—"}</td>
+                                      <td style={TDr}>{o?.notInterested||"—"}</td>
+                                      <td style={{...TDr,color:C_MUTED,fontSize:11}}>{o?.notInterested?pct2(o.notInterested):"—"}</td>
+                                      <td style={TDr}>{o?.notLiquid||"—"}</td>
+                                      <td style={{...TDr,color:C_MUTED,fontSize:11}}>{o?.notLiquid?pct2(o.notLiquid):"—"}</td>
+                                      <td style={TDr}>{o?.interested||"—"}</td>
+                                      <td style={{...TDr,color:C_MUTED,fontSize:11}}>{o?.interested?pct2(o.interested):"—"}</td>
+                                      <td style={TDr}></td><td style={TDr}></td>
+                                      <td style={TDr}></td><td style={TDr}></td>
+                                    </tr>
+                                    )
+                                  }))
+                                })()}
                               </tbody>
                             </table>
                           </div>
@@ -4324,9 +4344,14 @@ function DashboardInner() {
                             <th style={TH}>Name</th><th style={THr}>Contacts</th><th style={THr}>Investors</th><th style={THr}>New AUC</th><th style={THr}>Meeting set for AIF</th><th style={THr}>New AIF investments</th>
                           </tr></thead>
                           <tbody>
-                            {["Joakim Andersen"].map((n,i)=>(
+                            {(compassData.wealthManagers||[{name:"Joakim Andersen",contacts:0,investors:0,newAuc:0}]).map((wm:any,i:number)=>(
                               <tr key={i} style={{background:i%2===0?C_BG:C_BDR2}}>
-                                <td style={TD}>{n}</td>{Array(5).fill(null).map((_,j)=><td key={j} style={TDr}></td>)}
+                                <td style={TD}>{wm.name}</td>
+                                <td style={{...TDr,fontWeight:600}}>{wm.contacts||"—"}</td>
+                                <td style={{...TDr,color:C_DK,fontWeight:600}}>{wm.investors||"—"}</td>
+                                <td style={{...TDr,fontWeight:600}}>{wm.newAuc>0?`${(wm.newAuc/1_000_000).toFixed(1)}M`:"—"}</td>
+                                <td style={TDr}></td>
+                                <td style={TDr}></td>
                               </tr>
                             ))}
                             <tr style={{background:C_HEAD}}>

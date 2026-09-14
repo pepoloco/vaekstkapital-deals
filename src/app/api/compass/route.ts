@@ -172,10 +172,10 @@ async function fetchDKSent(fromMs: number, toMs: number) {
 }
 
 async function fetchMeetings(fromMs: number, toMs: number) {
+  // Fetch ALL outcomes so we can both count quality meetings (COMPLETED) and build outcome breakdown
   return searchAll("meetings", [{ filters: [
-    { propertyName: "hs_meeting_outcome", operator: "EQ",  value: "COMPLETED"   },
-    { propertyName: "hs_timestamp",       operator: "GTE", value: String(fromMs) },
-    { propertyName: "hs_timestamp",       operator: "LTE", value: String(toMs)  },
+    { propertyName: "hs_timestamp", operator: "GTE", value: String(fromMs) },
+    { propertyName: "hs_timestamp", operator: "LTE", value: String(toMs)  },
   ]}], ["hs_meeting_outcome","hs_timestamp","hubspot_owner_id"])
 }
 
@@ -331,10 +331,35 @@ export async function GET(req: Request) {
       fetchCalls(fromMs, toMs),
     ])
 
-    // Meetings by owner
+    // Meetings by owner — quality = COMPLETED only; also track per-outcome counts
     const meetingsByOwner: Record<string, number> = {}
+    const outcomesByOwner: Record<string, Record<string, number>> = {}
     for (const m of meetings) {
-      if (m.hubspot_owner_id) meetingsByOwner[m.hubspot_owner_id] = (meetingsByOwner[m.hubspot_owner_id] ?? 0) + 1
+      const oid     = m.hubspot_owner_id
+      const outcome = (m.hs_meeting_outcome || "UNKNOWN").toUpperCase()
+      if (!oid) continue
+      if (outcome === "COMPLETED") meetingsByOwner[oid] = (meetingsByOwner[oid] ?? 0) + 1
+      if (!outcomesByOwner[oid]) outcomesByOwner[oid] = {}
+      outcomesByOwner[oid][outcome] = (outcomesByOwner[oid][outcome] ?? 0) + 1
+    }
+
+    const countryOutcomes = (ownerIds: Set<string>) => {
+      const totals: Record<string, number> = {}
+      for (const oid of ownerIds) {
+        for (const [outcome, count] of Object.entries(outcomesByOwner[oid] ?? {})) {
+          totals[outcome] = (totals[outcome] ?? 0) + count
+        }
+      }
+      const total = Object.values(totals).reduce((s, n) => s + n, 0)
+      const get = (...keys: string[]) => keys.reduce((s, k) => s + (totals[k] ?? 0), 0)
+      return {
+        total,
+        disqualified:  get("DISQUALIFIED"),
+        noShow:        get("NO_SHOW", "CANCELED", "CANCELLED"),
+        notInterested: get("NOT_INTERESTED"),
+        notLiquid:     get("NOT_CURRENTLY_LIQUID", "NOT_LIQUID"),
+        interested:    get("COMPLETED", "INTERESTED"),
+      }
     }
 
     // Calls by owner
@@ -406,9 +431,10 @@ export async function GET(req: Request) {
 
     return {
       label,
-      summary:     { dk: dkStats, se: seStats },
-      attribution: { dk: attrDealSet(dkWon), se: attrDealSet(seWon) },
-      people:      Object.values(personMap).sort((a, b) => b.wonAmount - a.wonAmount),
+      summary:         { dk: dkStats, se: seStats },
+      attribution:     { dk: attrDealSet(dkWon), se: attrDealSet(seWon) },
+      people:          Object.values(personMap).sort((a, b) => b.wonAmount - a.wonAmount),
+      meetingOutcomes: { dk: countryOutcomes(dkOwnerIds), se: countryOutcomes(seOwnerIds) },
     }
   }
 
@@ -442,10 +468,31 @@ export async function GET(req: Request) {
     }
   }
 
+  // Wealth manager data (Joakim Andersen jva@vaekstkapital.dk)
+  const fetchWealthManagers = async () => {
+    const WEALTH_MANAGERS = [
+      { name: "Joakim Andersen", email: "jva@vaekstkapital.dk" },
+    ]
+    const results = []
+    for (const wm of WEALTH_MANAGERS) {
+      const ownerId = Object.entries(owners.emailByOwner).find(([, e]) => e === wm.email)?.[0] ?? ""
+      if (!ownerId) { results.push({ name: wm.name, contacts: 0, investors: 0, newAuc: 0 }); continue }
+      const contacts = await searchAll("contacts",
+        [{ filters: [{ propertyName: "private_wealth_manager", operator: "EQ", value: ownerId }] }],
+        ["private_wealth_manager","total_auc"]
+      )
+      const investors = contacts.filter(c => parseFloat(c.total_auc || "0") > 0).length
+      const newAuc    = contacts.reduce((s, c) => s + (parseFloat(c.total_auc || "0") || 0), 0)
+      results.push({ name: wm.name, contacts: contacts.length, investors, newAuc })
+    }
+    return results
+  }
+
   // Run periods sequentially to stay within HubSpot rate limits
-  const [primaryData, aucData] = await Promise.all([
+  const [primaryData, aucData, wealthManagerData] = await Promise.all([
     computeMonth(primary.fromMs, primary.toMs, primary.label),
     fetchAUC(),
+    fetchWealthManagers(),
   ])
   const compareData = compare ? await computeMonth(compare.fromMs, compare.toMs, compare.label) : null
 
@@ -457,7 +504,8 @@ export async function GET(req: Request) {
     // Keep legacy names so existing state that hasn't re-fetched still works
     thisMonth:   primaryData,
     lastMonth:   compareData ?? primaryData,
-    teamMembers: teamMembers.map(m => ({ name: m.name, role: m.role, teamName: m.teamName, country: m.country })),
+    teamMembers:    teamMembers.map(m => ({ name: m.name, role: m.role, teamName: m.teamName, country: m.country })),
+    wealthManagers: wealthManagerData,
     generatedAt: new Date().toISOString(),
   })
 }
