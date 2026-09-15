@@ -41,7 +41,8 @@ type Campaign = {
 type Summary = {
   beforeDeals: number
   beforeAmt: number
-  beforeAmtReinvestors: number  // beforeTotal only for contacts who also have after-deals
+  beforeAmtReinvestors: number   // beforeTotal for contacts who also have after-deals
+  beforeDealsReinvestors: number // beforeCount for contacts who also have after-deals
   afterDeals: number
   afterAmt: number
   avgAfterAmt: number
@@ -337,14 +338,16 @@ function WebinarCard({ c, summary, summaryLoading, onClick }: {
             </div>
           </div>
           <div style={{ marginLeft: "auto" }}>
-            <div style={{ fontSize: 9, color: "var(--ink3)", letterSpacing: ".07em", textTransform: "uppercase", marginBottom: 2 }}>Difference</div>
+            <div style={{ fontSize: 9, color: "var(--ink3)", letterSpacing: ".07em", textTransform: "uppercase", marginBottom: 2 }}>Δ Avg. deal size</div>
             <div style={{ fontSize: 14, fontWeight: 700 }}>
               {summaryLoading ? dot : (() => {
-                const before = summary?.beforeAmtReinvestors || 0
-                const after  = summary?.afterAmt || 0
-                if (!after) return "—"
-                const diff = after - before
-                return <span style={{ color: diff >= 0 ? "#15624c" : "#c2410c" }}>{diff >= 0 ? "+" : ""}{fmtAmt(diff, currency)}</span>
+                const afterDeals  = summary?.afterDeals || 0
+                const beforeDeals = summary?.beforeDealsReinvestors || 0
+                if (!afterDeals) return "—"
+                const avgAfter  = afterDeals  > 0 ? (summary!.afterAmt || 0)              / afterDeals  : 0
+                const avgBefore = beforeDeals > 0 ? (summary!.beforeAmtReinvestors || 0)  / beforeDeals : 0
+                const diff = avgAfter - avgBefore
+                return <span style={{ color: diff >= 0 ? "#15624c" : "#c2410c" }}>{diff >= 0 ? "+" : ""}{fmtAmt(Math.round(diff), currency)}</span>
               })()}
             </div>
           </div>
@@ -407,7 +410,8 @@ export default function SeminarsPage() {
               ...prev,
               [c.id]: {
                 beforeDeals, beforeAmt,
-                beforeAmtReinvestors: reinvestors.reduce((s, x) => s + x.beforeTotal, 0),
+                beforeAmtReinvestors:   reinvestors.reduce((s, x) => s + x.beforeTotal, 0),
+                beforeDealsReinvestors: reinvestors.reduce((s, x) => s + x.beforeCount, 0),
                 afterDeals, afterAmt,
                 avgAfterAmt: afterDeals > 0 ? afterAmt / afterDeals : 0,
                 totalDeals:  beforeDeals + afterDeals,
@@ -445,7 +449,8 @@ export default function SeminarsPage() {
             ...prev,
             [c.id]: {
               beforeDeals, beforeAmt,
-              beforeAmtReinvestors: reinvestors.reduce((s: number, x: ContactRow) => s + x.beforeTotal, 0),
+              beforeAmtReinvestors:   reinvestors.reduce((s: number, x: ContactRow) => s + x.beforeTotal, 0),
+              beforeDealsReinvestors: reinvestors.reduce((s: number, x: ContactRow) => s + x.beforeCount, 0),
               afterDeals, afterAmt,
               avgAfterAmt: afterDeals > 0 ? afterAmt / afterDeals : 0,
               totalDeals:  beforeDeals + afterDeals,
@@ -593,10 +598,14 @@ export default function SeminarsPage() {
                   // Only compare reinvestors (contacts with after-deals) — comparing their
                   // pre-webinar history to their post-webinar investment is apples-to-apples.
                   // Including non-reinvestors inflates Before and makes the difference meaningless.
-                  const reinvestors = reportData.contacts.filter(c => c.afterCount > 0)
-                  const beforeAmt   = reinvestors.reduce((s, c) => s + c.beforeTotal, 0)
-                  const afterAmt    = reinvestors.reduce((s, c) => s + c.afterTotal, 0)
-                  const diff        = afterAmt - beforeAmt
+                  const reinvestors   = reportData.contacts.filter(c => c.afterCount > 0)
+                  const beforeAmt     = reinvestors.reduce((s, c) => s + c.beforeTotal, 0)
+                  const beforeDeals   = reinvestors.reduce((s, c) => s + c.beforeCount, 0)
+                  const afterAmt      = reinvestors.reduce((s, c) => s + c.afterTotal, 0)
+                  const afterDeals    = reinvestors.reduce((s, c) => s + c.afterCount, 0)
+                  const avgBefore     = beforeDeals > 0 ? beforeAmt / beforeDeals : 0
+                  const avgAfter      = afterDeals  > 0 ? afterAmt  / afterDeals  : 0
+                  const diff          = avgAfter - avgBefore
                   return (
                     <>
                       <div style={{ width: 1, background: "var(--bdr)", alignSelf: "stretch" }} />
@@ -609,9 +618,9 @@ export default function SeminarsPage() {
                         <div style={{ fontSize: 13, fontWeight: 700, color: "#15624c" }}>{afterAmt > 0 ? fmtAmt(afterAmt, cur) : "—"}</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: 9, color: "var(--ink3)", letterSpacing: ".07em", textTransform: "uppercase" }}>Difference</div>
+                        <div style={{ fontSize: 9, color: "var(--ink3)", letterSpacing: ".07em", textTransform: "uppercase" }}>Δ Avg. deal size</div>
                         <div style={{ fontSize: 13, fontWeight: 700, color: diff >= 0 ? "#15624c" : "#c2410c" }}>
-                          {afterAmt > 0 ? `${diff >= 0 ? "+" : ""}${fmtAmt(diff, cur)}` : "—"}
+                          {afterDeals > 0 ? `${diff >= 0 ? "+" : ""}${fmtAmt(Math.round(diff), cur)}` : "—"}
                         </div>
                       </div>
                     </>
