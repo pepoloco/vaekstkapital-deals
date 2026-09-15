@@ -5,17 +5,15 @@ const BASE = "https://api.hubapi.com"
 const KEY = process.env.HUBSPOT_API_KEY!
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
-// Match lists named like:
-//   "BU DK - Webinar 12.05.26 - Attended & replays"
-//   "DK - Webinar 19.08.25 attendees and replays"
-//   "DK - SR Webinar June 18 2025 - attendees and replays"
-// Must contain "webinar" + ("attended" or "replay"), exclude "deals won" segment.
+// Match only lists whose name contains "Attended/Replays" with a literal forward slash,
+// e.g. "BU DK - Webinar 12.05.26 - Attended/Replays"
 function isWebinarList(name: string): boolean {
   const lower = name.toLowerCase()
   if (!lower.includes("webinar")) return false
   if (lower.includes("deals won")) return false
   if (lower.includes("total")) return false
-  if (!lower.includes("attended") && !lower.includes("replay")) return false
+  // Must contain the exact "attended/replays" with a forward slash
+  if (!lower.includes("attended/replays")) return false
   return (
     lower.startsWith("bu dk") || lower.startsWith("bu se") ||
     lower.startsWith("dk -") || lower.startsWith("dk–") ||

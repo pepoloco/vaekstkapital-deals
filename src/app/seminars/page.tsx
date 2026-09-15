@@ -39,6 +39,9 @@ type Campaign = {
 }
 
 type Summary = {
+  beforeDeals: number
+  beforeAmt: number
+  beforeAmtReinvestors: number  // beforeTotal only for contacts who also have after-deals
   afterDeals: number
   afterAmt: number
   avgAfterAmt: number
@@ -307,7 +310,6 @@ function WebinarCard({ c, summary, summaryLoading, onClick }: {
       onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--bdr)")}
     >
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 12 }}>
-        <span style={{ fontSize: 16, lineHeight: 1.3, flexShrink: 0 }}>{flag}</span>
         <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink1)", lineHeight: 1.4 }}>{name}</div>
       </div>
       <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: summary || summaryLoading ? 12 : 0 }}>
@@ -323,21 +325,27 @@ function WebinarCard({ c, summary, summaryLoading, onClick }: {
       {(summary || summaryLoading) && (
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", paddingTop: 10, borderTop: "1px solid var(--bdr)" }}>
           <div>
-            <div style={{ fontSize: 9, color: "#15624c", letterSpacing: ".07em", textTransform: "uppercase", marginBottom: 2 }}>New deals after</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#15624c" }}>
-              {summaryLoading ? dot : (summary!.afterDeals || "—")}
+            <div style={{ fontSize: 9, color: "#2d68b0", letterSpacing: ".07em", textTransform: "uppercase", marginBottom: 2 }}>Before</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#2d68b0" }}>
+              {summaryLoading ? dot : (summary!.beforeAmt > 0 ? fmtAmt(summary!.beforeAmt, currency) : "—")}
             </div>
           </div>
           <div>
-            <div style={{ fontSize: 9, color: "#15624c", letterSpacing: ".07em", textTransform: "uppercase", marginBottom: 2 }}>Net amount after</div>
+            <div style={{ fontSize: 9, color: "#15624c", letterSpacing: ".07em", textTransform: "uppercase", marginBottom: 2 }}>After</div>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#15624c" }}>
               {summaryLoading ? dot : (summary!.afterAmt > 0 ? fmtAmt(summary!.afterAmt, currency) : "—")}
             </div>
           </div>
-          <div>
-            <div style={{ fontSize: 9, color: "var(--ink3)", letterSpacing: ".07em", textTransform: "uppercase", marginBottom: 2 }}>Avg. after amount</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--ink2)" }}>
-              {summaryLoading ? dot : (summary!.avgAfterAmt > 0 ? fmtAmt(summary!.avgAfterAmt, currency) : "—")}
+          <div style={{ marginLeft: "auto" }}>
+            <div style={{ fontSize: 9, color: "var(--ink3)", letterSpacing: ".07em", textTransform: "uppercase", marginBottom: 2 }}>Difference</div>
+            <div style={{ fontSize: 14, fontWeight: 700 }}>
+              {summaryLoading ? dot : (() => {
+                const before = summary?.beforeAmtReinvestors || 0
+                const after  = summary?.afterAmt || 0
+                if (!after) return "—"
+                const diff = after - before
+                return <span style={{ color: diff >= 0 ? "#15624c" : "#c2410c" }}>{diff >= 0 ? "+" : ""}{fmtAmt(diff, currency)}</span>
+              })()}
             </div>
           </div>
         </div>
@@ -389,17 +397,21 @@ export default function SeminarsPage() {
           const d = await r.json()
           if (cancelled) break
           if (d.contacts) {
-            const rows = d.contacts as ContactRow[]
-            const afterDeals = rows.reduce((s, x) => s + x.afterCount, 0)
-            const afterAmt   = rows.reduce((s, x) => s + x.afterTotal, 0)
+            const rows        = d.contacts as ContactRow[]
+            const reinvestors = rows.filter(x => x.afterCount > 0)
+            const beforeDeals = rows.reduce((s, x) => s + x.beforeCount, 0)
+            const beforeAmt   = rows.reduce((s, x) => s + x.beforeTotal, 0)
+            const afterDeals  = rows.reduce((s, x) => s + x.afterCount, 0)
+            const afterAmt    = rows.reduce((s, x) => s + x.afterTotal, 0)
             setSummaries(prev => ({
               ...prev,
               [c.id]: {
-                afterDeals,
-                afterAmt,
+                beforeDeals, beforeAmt,
+                beforeAmtReinvestors: reinvestors.reduce((s, x) => s + x.beforeTotal, 0),
+                afterDeals, afterAmt,
                 avgAfterAmt: afterDeals > 0 ? afterAmt / afterDeals : 0,
-                totalDeals:  rows.reduce((s, x) => s + x.beforeCount + x.afterCount, 0),
-                totalAmt:    rows.reduce((s, x) => s + x.beforeTotal + x.afterTotal, 0),
+                totalDeals:  beforeDeals + afterDeals,
+                totalAmt:    beforeAmt + afterAmt,
               },
             }))
           }
@@ -423,17 +435,21 @@ export default function SeminarsPage() {
         setReportData(d)
         setReportLoading(false)
         if (d.contacts) {
-          const rows = d.contacts as ContactRow[]
-          const afterDeals = rows.reduce((s: number, x: ContactRow) => s + x.afterCount, 0)
-          const afterAmt   = rows.reduce((s: number, x: ContactRow) => s + x.afterTotal, 0)
+          const rows        = d.contacts as ContactRow[]
+          const reinvestors = rows.filter((x: ContactRow) => x.afterCount > 0)
+          const beforeDeals = rows.reduce((s: number, x: ContactRow) => s + x.beforeCount, 0)
+          const beforeAmt   = rows.reduce((s: number, x: ContactRow) => s + x.beforeTotal, 0)
+          const afterDeals  = rows.reduce((s: number, x: ContactRow) => s + x.afterCount, 0)
+          const afterAmt    = rows.reduce((s: number, x: ContactRow) => s + x.afterTotal, 0)
           setSummaries(prev => ({
             ...prev,
             [c.id]: {
-              afterDeals,
-              afterAmt,
+              beforeDeals, beforeAmt,
+              beforeAmtReinvestors: reinvestors.reduce((s: number, x: ContactRow) => s + x.beforeTotal, 0),
+              afterDeals, afterAmt,
               avgAfterAmt: afterDeals > 0 ? afterAmt / afterDeals : 0,
-              totalDeals:  rows.reduce((s: number, x: ContactRow) => s + x.beforeCount + x.afterCount, 0),
-              totalAmt:    rows.reduce((s: number, x: ContactRow) => s + x.beforeTotal + x.afterTotal, 0),
+              totalDeals:  beforeDeals + afterDeals,
+              totalAmt:    beforeAmt + afterAmt,
             },
           }))
         }
@@ -573,24 +589,30 @@ export default function SeminarsPage() {
                   <div style={{ fontSize: 13, fontWeight: 700, color: "#7c3aed" }}>{selected.participantCount}</div>
                 </div>
                 {reportData && (() => {
-                  const cur        = selected.country === "SE" ? "SEK" : "DKK"
-                  const afterDeals = reportData.contacts.reduce((s, c) => s + c.afterCount, 0)
-                  const afterAmt   = reportData.contacts.reduce((s, c) => s + c.afterTotal, 0)
-                  const totalAmt   = reportData.contacts.reduce((s, c) => s + c.beforeTotal + c.afterTotal, 0)
+                  const cur = selected.country === "SE" ? "SEK" : "DKK"
+                  // Only compare reinvestors (contacts with after-deals) — comparing their
+                  // pre-webinar history to their post-webinar investment is apples-to-apples.
+                  // Including non-reinvestors inflates Before and makes the difference meaningless.
+                  const reinvestors = reportData.contacts.filter(c => c.afterCount > 0)
+                  const beforeAmt   = reinvestors.reduce((s, c) => s + c.beforeTotal, 0)
+                  const afterAmt    = reinvestors.reduce((s, c) => s + c.afterTotal, 0)
+                  const diff        = afterAmt - beforeAmt
                   return (
                     <>
                       <div style={{ width: 1, background: "var(--bdr)", alignSelf: "stretch" }} />
                       <div>
-                        <div style={{ fontSize: 9, color: "#15624c", letterSpacing: ".07em", textTransform: "uppercase" }}>After-Webinar Deals</div>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: "#15624c" }}>{afterDeals}</div>
+                        <div style={{ fontSize: 9, color: "#2d68b0", letterSpacing: ".07em", textTransform: "uppercase" }}>Before amount</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#2d68b0" }}>{beforeAmt > 0 ? fmtAmt(beforeAmt, cur) : "—"}</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: 9, color: "#15624c", letterSpacing: ".07em", textTransform: "uppercase" }}>Net Amount After</div>
+                        <div style={{ fontSize: 9, color: "#15624c", letterSpacing: ".07em", textTransform: "uppercase" }}>After amount</div>
                         <div style={{ fontSize: 13, fontWeight: 700, color: "#15624c" }}>{afterAmt > 0 ? fmtAmt(afterAmt, cur) : "—"}</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: 9, color: "var(--ink3)", letterSpacing: ".07em", textTransform: "uppercase" }}>Total Amount</div>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink1)" }}>{fmtAmt(totalAmt, cur)}</div>
+                        <div style={{ fontSize: 9, color: "var(--ink3)", letterSpacing: ".07em", textTransform: "uppercase" }}>Difference</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: diff >= 0 ? "#15624c" : "#c2410c" }}>
+                          {afterAmt > 0 ? `${diff >= 0 ? "+" : ""}${fmtAmt(diff, cur)}` : "—"}
+                        </div>
                       </div>
                     </>
                   )
