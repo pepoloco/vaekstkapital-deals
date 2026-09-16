@@ -222,6 +222,7 @@ function ParticipantTable({ reportData, currency }: { reportData: ReportData; cu
               <th style={{ ...thr, color: "#15624c" }}># After</th>
               <th style={{ ...thr, color: "#15624c" }}>New Investment</th>
               <th style={{ ...thr, color: "#0369a1" }}>Reinvestment</th>
+              <th style={{ ...thr, color: "var(--ink3)" }}>Δ Avg. Deal</th>
               <th style={{ ...th, width: 60 }}></th>
             </tr>
           </thead>
@@ -229,6 +230,9 @@ function ParticipantTable({ reportData, currency }: { reportData: ReportData; cu
             {contacts.map(c => {
               const isFirstTimer = c.afterCount > 0 && c.beforeCount === 0
               const isReinvestor = c.afterCount > 0 && c.beforeCount > 0
+              const avgBefore = c.beforeCount > 0 ? c.beforeTotal / c.beforeCount : 0
+              const avgAfter  = c.afterCount  > 0 ? c.afterTotal  / c.afterCount  : 0
+              const avgDiff   = isReinvestor ? avgAfter - avgBefore : null
               return (
                 <tr key={c.id}>
                   <td style={td}>
@@ -245,6 +249,13 @@ function ParticipantTable({ reportData, currency }: { reportData: ReportData; cu
                   <td style={{ ...tdr, color: "#15624c", fontWeight: 600 }}>{c.afterCount || "—"}</td>
                   <td style={{ ...tdr, color: "#15624c" }}>{isFirstTimer ? fmtAmt(c.afterTotal, currency) : "—"}</td>
                   <td style={{ ...tdr, color: "#0369a1" }}>{isReinvestor ? fmtAmt(c.afterTotal, currency) : "—"}</td>
+                  <td style={{ ...tdr }}>
+                    {avgDiff !== null ? (
+                      <span style={{ color: avgDiff >= 0 ? "#15624c" : "#c2410c", fontWeight: 700 }}>
+                        {avgDiff >= 0 ? "+" : ""}{fmtAmt(Math.round(avgDiff), currency)}
+                      </span>
+                    ) : "—"}
+                  </td>
                   <td style={{ ...td, textAlign: "center" }}>
                     <button onClick={() => setExpandedContact(c)} style={{
                       fontSize: 10, padding: "3px 8px", borderRadius: 4,
@@ -264,6 +275,18 @@ function ParticipantTable({ reportData, currency }: { reportData: ReportData; cu
               <td style={{ ...tdr, color: "#15624c", fontWeight: 700 }}>{totCntAfter || "—"}</td>
               <td style={{ ...tdr, color: "#15624c", fontWeight: 700 }}>{totNewInv > 0 ? fmtAmt(totNewInv, currency) : "—"}</td>
               <td style={{ ...tdr, color: "#0369a1", fontWeight: 700 }}>{totReinvest > 0 ? fmtAmt(totReinvest, currency) : "—"}</td>
+              <td style={{ ...tdr, fontWeight: 700 }}>
+                {(() => {
+                  const reinvRows = contacts.filter(c => c.afterCount > 0 && c.beforeCount > 0)
+                  const rBefore = reinvRows.reduce((s, c) => s + c.beforeTotal, 0)
+                  const rBDeals = reinvRows.reduce((s, c) => s + c.beforeCount, 0)
+                  const rAfter  = reinvRows.reduce((s, c) => s + c.afterTotal, 0)
+                  const rADeals = reinvRows.reduce((s, c) => s + c.afterCount, 0)
+                  if (!rBDeals || !rADeals) return "—"
+                  const diff = (rAfter / rADeals) - (rBefore / rBDeals)
+                  return <span style={{ color: diff >= 0 ? "#15624c" : "#c2410c" }}>{diff >= 0 ? "+" : ""}{fmtAmt(Math.round(diff), currency)}</span>
+                })()}
+              </td>
               <td style={td} />
             </tr>
           </tfoot>
@@ -567,9 +590,16 @@ export default function SeminarsPage() {
                 {reportData && (() => {
                   const cur = selected.country === "SE" ? "SEK" : "DKK"
                   const allContacts    = reportData.contacts
+                  const reinvestors   = allContacts.filter(c => c.afterCount > 0 && c.beforeCount > 0)
                   const beforeAmt     = allContacts.reduce((s, c) => s + c.beforeTotal, 0)
                   const newInvAmt     = allContacts.filter(c => c.afterCount > 0 && c.beforeCount === 0).reduce((s, c) => s + c.afterTotal, 0)
-                  const reinvestAmt   = allContacts.filter(c => c.afterCount > 0 && c.beforeCount > 0).reduce((s, c) => s + c.afterTotal, 0)
+                  const reinvestAmt   = reinvestors.reduce((s, c) => s + c.afterTotal, 0)
+                  const reinvestBefore = reinvestors.reduce((s, c) => s + c.beforeTotal, 0)
+                  const reinvestBeforeDeals = reinvestors.reduce((s, c) => s + c.beforeCount, 0)
+                  const reinvestAfterDeals  = reinvestors.reduce((s, c) => s + c.afterCount, 0)
+                  const avgBefore = reinvestBeforeDeals > 0 ? reinvestBefore / reinvestBeforeDeals : 0
+                  const avgAfter  = reinvestAfterDeals  > 0 ? reinvestAmt    / reinvestAfterDeals  : 0
+                  const avgDiff   = reinvestAfterDeals > 0 && avgBefore > 0 ? avgAfter - avgBefore : null
                   return (
                     <>
                       <div style={{ width: 1, background: "var(--bdr)", alignSelf: "stretch" }} />
@@ -584,6 +614,12 @@ export default function SeminarsPage() {
                       <div>
                         <div style={{ fontSize: 9, color: "#0369a1", letterSpacing: ".07em", textTransform: "uppercase" }}>Reinvestments</div>
                         <div style={{ fontSize: 13, fontWeight: 700, color: "#0369a1" }}>{reinvestAmt > 0 ? fmtAmt(reinvestAmt, cur) : "—"}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9, color: "var(--ink3)", letterSpacing: ".07em", textTransform: "uppercase" }}>Δ Avg. deal size</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: avgDiff === null ? "var(--ink3)" : avgDiff >= 0 ? "#15624c" : "#c2410c" }}>
+                          {avgDiff === null ? "—" : `${avgDiff >= 0 ? "+" : ""}${fmtAmt(Math.round(avgDiff), cur)}`}
+                        </div>
                       </div>
                     </>
                   )
