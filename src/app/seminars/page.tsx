@@ -41,11 +41,10 @@ type Campaign = {
 type Summary = {
   beforeDeals: number
   beforeAmt: number
-  beforeAmtReinvestors: number   // beforeTotal for contacts who also have after-deals
-  beforeDealsReinvestors: number // beforeCount for contacts who also have after-deals
   afterDeals: number
   afterAmt: number
-  avgAfterAmt: number
+  afterAmtNew: number       // after amount for first-time investors (beforeCount === 0)
+  afterAmtReinvest: number  // after amount for reinvestors (beforeCount > 0)
   totalDeals: number
   totalAmt: number
 }
@@ -197,10 +196,11 @@ function ParticipantTable({ reportData, currency }: { reportData: ReportData; cu
     )
   }
 
-  const totBefore     = contacts.reduce((s, c) => s + c.beforeTotal, 0)
-  const totAfter      = contacts.reduce((s, c) => s + c.afterTotal, 0)
-  const totCntBefore  = contacts.reduce((s, c) => s + c.beforeCount, 0)
-  const totCntAfter   = contacts.reduce((s, c) => s + c.afterCount, 0)
+  const totBefore       = contacts.reduce((s, c) => s + c.beforeTotal, 0)
+  const totCntBefore    = contacts.reduce((s, c) => s + c.beforeCount, 0)
+  const totCntAfter     = contacts.reduce((s, c) => s + c.afterCount, 0)
+  const totNewInv       = contacts.filter(c => c.afterCount > 0 && c.beforeCount === 0).reduce((s, c) => s + c.afterTotal, 0)
+  const totReinvest     = contacts.filter(c => c.afterCount > 0 && c.beforeCount > 0).reduce((s, c) => s + c.afterTotal, 0)
 
   return (
     <>
@@ -220,17 +220,15 @@ function ParticipantTable({ reportData, currency }: { reportData: ReportData; cu
               <th style={{ ...thr, color: "#2d68b0" }}># Before</th>
               <th style={{ ...thr, color: "#2d68b0" }}>Amount Before</th>
               <th style={{ ...thr, color: "#15624c" }}># After</th>
-              <th style={{ ...thr, color: "#15624c" }}>Net Amount After</th>
-              <th style={{ ...thr, color: "#2d68b0" }}>Avg. Before</th>
-              <th style={{ ...thr, color: "var(--ink3)" }}>Δ Avg. Deal</th>
+              <th style={{ ...thr, color: "#15624c" }}>New Investment</th>
+              <th style={{ ...thr, color: "#0369a1" }}>Reinvestment</th>
               <th style={{ ...th, width: 60 }}></th>
             </tr>
           </thead>
           <tbody>
             {contacts.map(c => {
-              const avgBefore = c.beforeCount > 0 ? c.beforeTotal / c.beforeCount : 0
-              const avgAfter  = c.afterCount  > 0 ? c.afterTotal  / c.afterCount  : 0
-              const avgDiff   = avgBefore > 0 && avgAfter > 0 ? avgAfter - avgBefore : null
+              const isFirstTimer = c.afterCount > 0 && c.beforeCount === 0
+              const isReinvestor = c.afterCount > 0 && c.beforeCount > 0
               return (
                 <tr key={c.id}>
                   <td style={td}>
@@ -245,15 +243,8 @@ function ParticipantTable({ reportData, currency }: { reportData: ReportData; cu
                   <td style={{ ...tdr, color: "#2d68b0", fontWeight: 600 }}>{c.beforeCount || "—"}</td>
                   <td style={{ ...tdr, color: "#2d68b0" }}>{c.beforeTotal > 0 ? fmtAmt(c.beforeTotal, currency) : "—"}</td>
                   <td style={{ ...tdr, color: "#15624c", fontWeight: 600 }}>{c.afterCount || "—"}</td>
-                  <td style={{ ...tdr, color: "#15624c" }}>{c.afterTotal > 0 ? fmtAmt(c.afterTotal, currency) : "—"}</td>
-                  <td style={{ ...tdr, color: "#2d68b0" }}>{avgBefore > 0 ? fmtAmt(avgBefore, currency) : "—"}</td>
-                  <td style={{ ...tdr }}>
-                    {avgDiff !== null ? (
-                      <span style={{ color: avgDiff > 0 ? "#15624c" : "#c2410c", fontWeight: 700 }}>
-                        {avgDiff > 0 ? "↑ " : "↓ "}{fmtAmt(Math.abs(avgDiff), currency)}
-                      </span>
-                    ) : "—"}
-                  </td>
+                  <td style={{ ...tdr, color: "#15624c" }}>{isFirstTimer ? fmtAmt(c.afterTotal, currency) : "—"}</td>
+                  <td style={{ ...tdr, color: "#0369a1" }}>{isReinvestor ? fmtAmt(c.afterTotal, currency) : "—"}</td>
                   <td style={{ ...td, textAlign: "center" }}>
                     <button onClick={() => setExpandedContact(c)} style={{
                       fontSize: 10, padding: "3px 8px", borderRadius: 4,
@@ -271,18 +262,8 @@ function ParticipantTable({ reportData, currency }: { reportData: ReportData; cu
               <td style={{ ...tdr, color: "#2d68b0", fontWeight: 700 }}>{totCntBefore || "—"}</td>
               <td style={{ ...tdr, color: "#2d68b0", fontWeight: 700 }}>{totBefore > 0 ? fmtAmt(totBefore, currency) : "—"}</td>
               <td style={{ ...tdr, color: "#15624c", fontWeight: 700 }}>{totCntAfter || "—"}</td>
-              <td style={{ ...tdr, color: "#15624c", fontWeight: 700 }}>{totAfter > 0 ? fmtAmt(totAfter, currency) : "—"}</td>
-              <td style={{ ...tdr, color: "#2d68b0", fontWeight: 700 }}>{totCntBefore > 0 ? fmtAmt(totBefore / totCntBefore, currency) : "—"}</td>
-              <td style={{ ...tdr, fontWeight: 700 }}>
-                {totCntBefore > 0 && totCntAfter > 0 ? (() => {
-                  const diff = (totAfter / totCntAfter) - (totBefore / totCntBefore)
-                  return (
-                    <span style={{ color: diff > 0 ? "#15624c" : "#c2410c", fontWeight: 700 }}>
-                      {diff > 0 ? "↑ " : "↓ "}{fmtAmt(Math.abs(diff), currency)}
-                    </span>
-                  )
-                })() : "—"}
-              </td>
+              <td style={{ ...tdr, color: "#15624c", fontWeight: 700 }}>{totNewInv > 0 ? fmtAmt(totNewInv, currency) : "—"}</td>
+              <td style={{ ...tdr, color: "#0369a1", fontWeight: 700 }}>{totReinvest > 0 ? fmtAmt(totReinvest, currency) : "—"}</td>
               <td style={td} />
             </tr>
           </tfoot>
@@ -332,23 +313,15 @@ function WebinarCard({ c, summary, summaryLoading, onClick }: {
             </div>
           </div>
           <div>
-            <div style={{ fontSize: 9, color: "#15624c", letterSpacing: ".07em", textTransform: "uppercase", marginBottom: 2 }}>After</div>
+            <div style={{ fontSize: 9, color: "#15624c", letterSpacing: ".07em", textTransform: "uppercase", marginBottom: 2 }}>New investments</div>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#15624c" }}>
-              {summaryLoading ? dot : (summary!.afterAmt > 0 ? fmtAmt(summary!.afterAmt, currency) : "—")}
+              {summaryLoading ? dot : (summary!.afterAmtNew > 0 ? fmtAmt(summary!.afterAmtNew, currency) : "—")}
             </div>
           </div>
-          <div style={{ marginLeft: "auto" }}>
-            <div style={{ fontSize: 9, color: "var(--ink3)", letterSpacing: ".07em", textTransform: "uppercase", marginBottom: 2 }}>Δ Avg. deal size</div>
-            <div style={{ fontSize: 14, fontWeight: 700 }}>
-              {summaryLoading ? dot : (() => {
-                const afterDeals  = summary?.afterDeals || 0
-                const beforeDeals = summary?.beforeDealsReinvestors || 0
-                if (!afterDeals) return "—"
-                const avgAfter  = afterDeals  > 0 ? (summary!.afterAmt || 0)              / afterDeals  : 0
-                const avgBefore = beforeDeals > 0 ? (summary!.beforeAmtReinvestors || 0)  / beforeDeals : 0
-                const diff = avgAfter - avgBefore
-                return <span style={{ color: diff >= 0 ? "#15624c" : "#c2410c" }}>{diff >= 0 ? "+" : ""}{fmtAmt(Math.round(diff), currency)}</span>
-              })()}
+          <div>
+            <div style={{ fontSize: 9, color: "#0369a1", letterSpacing: ".07em", textTransform: "uppercase", marginBottom: 2 }}>Reinvestments</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#0369a1" }}>
+              {summaryLoading ? dot : (summary!.afterAmtReinvest > 0 ? fmtAmt(summary!.afterAmtReinvest, currency) : "—")}
             </div>
           </div>
         </div>
@@ -401,21 +374,20 @@ export default function SeminarsPage() {
           if (cancelled) break
           if (d.contacts) {
             const rows        = d.contacts as ContactRow[]
-            const reinvestors = rows.filter(x => x.afterCount > 0)
             const beforeDeals = rows.reduce((s, x) => s + x.beforeCount, 0)
             const beforeAmt   = rows.reduce((s, x) => s + x.beforeTotal, 0)
             const afterDeals  = rows.reduce((s, x) => s + x.afterCount, 0)
             const afterAmt    = rows.reduce((s, x) => s + x.afterTotal, 0)
+            const afterAmtNew     = rows.filter(x => x.afterCount > 0 && x.beforeCount === 0).reduce((s, x) => s + x.afterTotal, 0)
+            const afterAmtReinvest = rows.filter(x => x.afterCount > 0 && x.beforeCount > 0).reduce((s, x) => s + x.afterTotal, 0)
             setSummaries(prev => ({
               ...prev,
               [c.id]: {
                 beforeDeals, beforeAmt,
-                beforeAmtReinvestors:   reinvestors.reduce((s, x) => s + x.beforeTotal, 0),
-                beforeDealsReinvestors: reinvestors.reduce((s, x) => s + x.beforeCount, 0),
                 afterDeals, afterAmt,
-                avgAfterAmt: afterDeals > 0 ? afterAmt / afterDeals : 0,
-                totalDeals:  beforeDeals + afterDeals,
-                totalAmt:    beforeAmt + afterAmt,
+                afterAmtNew, afterAmtReinvest,
+                totalDeals: beforeDeals + afterDeals,
+                totalAmt:   beforeAmt + afterAmt,
               },
             }))
           }
@@ -440,21 +412,20 @@ export default function SeminarsPage() {
         setReportLoading(false)
         if (d.contacts) {
           const rows        = d.contacts as ContactRow[]
-          const reinvestors = rows.filter((x: ContactRow) => x.afterCount > 0)
           const beforeDeals = rows.reduce((s: number, x: ContactRow) => s + x.beforeCount, 0)
           const beforeAmt   = rows.reduce((s: number, x: ContactRow) => s + x.beforeTotal, 0)
           const afterDeals  = rows.reduce((s: number, x: ContactRow) => s + x.afterCount, 0)
           const afterAmt    = rows.reduce((s: number, x: ContactRow) => s + x.afterTotal, 0)
+          const afterAmtNew      = rows.filter((x: ContactRow) => x.afterCount > 0 && x.beforeCount === 0).reduce((s: number, x: ContactRow) => s + x.afterTotal, 0)
+          const afterAmtReinvest = rows.filter((x: ContactRow) => x.afterCount > 0 && x.beforeCount > 0).reduce((s: number, x: ContactRow) => s + x.afterTotal, 0)
           setSummaries(prev => ({
             ...prev,
             [c.id]: {
               beforeDeals, beforeAmt,
-              beforeAmtReinvestors:   reinvestors.reduce((s: number, x: ContactRow) => s + x.beforeTotal, 0),
-              beforeDealsReinvestors: reinvestors.reduce((s: number, x: ContactRow) => s + x.beforeCount, 0),
               afterDeals, afterAmt,
-              avgAfterAmt: afterDeals > 0 ? afterAmt / afterDeals : 0,
-              totalDeals:  beforeDeals + afterDeals,
-              totalAmt:    beforeAmt + afterAmt,
+              afterAmtNew, afterAmtReinvest,
+              totalDeals: beforeDeals + afterDeals,
+              totalAmt:   beforeAmt + afterAmt,
             },
           }))
         }
@@ -595,17 +566,10 @@ export default function SeminarsPage() {
                 </div>
                 {reportData && (() => {
                   const cur = selected.country === "SE" ? "SEK" : "DKK"
-                  // Only compare reinvestors (contacts with after-deals) — comparing their
-                  // pre-webinar history to their post-webinar investment is apples-to-apples.
-                  // Including non-reinvestors inflates Before and makes the difference meaningless.
-                  const reinvestors   = reportData.contacts.filter(c => c.afterCount > 0)
-                  const beforeAmt     = reinvestors.reduce((s, c) => s + c.beforeTotal, 0)
-                  const beforeDeals   = reinvestors.reduce((s, c) => s + c.beforeCount, 0)
-                  const afterAmt      = reinvestors.reduce((s, c) => s + c.afterTotal, 0)
-                  const afterDeals    = reinvestors.reduce((s, c) => s + c.afterCount, 0)
-                  const avgBefore     = beforeDeals > 0 ? beforeAmt / beforeDeals : 0
-                  const avgAfter      = afterDeals  > 0 ? afterAmt  / afterDeals  : 0
-                  const diff          = avgAfter - avgBefore
+                  const allContacts    = reportData.contacts
+                  const beforeAmt     = allContacts.reduce((s, c) => s + c.beforeTotal, 0)
+                  const newInvAmt     = allContacts.filter(c => c.afterCount > 0 && c.beforeCount === 0).reduce((s, c) => s + c.afterTotal, 0)
+                  const reinvestAmt   = allContacts.filter(c => c.afterCount > 0 && c.beforeCount > 0).reduce((s, c) => s + c.afterTotal, 0)
                   return (
                     <>
                       <div style={{ width: 1, background: "var(--bdr)", alignSelf: "stretch" }} />
@@ -614,14 +578,12 @@ export default function SeminarsPage() {
                         <div style={{ fontSize: 13, fontWeight: 700, color: "#2d68b0" }}>{beforeAmt > 0 ? fmtAmt(beforeAmt, cur) : "—"}</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: 9, color: "#15624c", letterSpacing: ".07em", textTransform: "uppercase" }}>After amount</div>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: "#15624c" }}>{afterAmt > 0 ? fmtAmt(afterAmt, cur) : "—"}</div>
+                        <div style={{ fontSize: 9, color: "#15624c", letterSpacing: ".07em", textTransform: "uppercase" }}>New investments</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#15624c" }}>{newInvAmt > 0 ? fmtAmt(newInvAmt, cur) : "—"}</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: 9, color: "var(--ink3)", letterSpacing: ".07em", textTransform: "uppercase" }}>Δ Avg. deal size</div>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: diff >= 0 ? "#15624c" : "#c2410c" }}>
-                          {afterDeals > 0 ? `${diff >= 0 ? "+" : ""}${fmtAmt(Math.round(diff), cur)}` : "—"}
-                        </div>
+                        <div style={{ fontSize: 9, color: "#0369a1", letterSpacing: ".07em", textTransform: "uppercase" }}>Reinvestments</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#0369a1" }}>{reinvestAmt > 0 ? fmtAmt(reinvestAmt, cur) : "—"}</div>
                       </div>
                     </>
                   )
