@@ -19,6 +19,7 @@ const TOOLS = [
   { label: "Contact Pipeline",    sub: "Lifecycle stages, stuck contacts, nurture candidates",     href: "/pipeline",                  color: "#2d68b0", adminOnly: false },
   { label: "Investor Tour",       sub: "VaekstNet investor onboarding & AUM",                     href: "/investortur",               color: "#15624c", adminOnly: false },
   { label: "Seminars",            sub: "Webinar attendees — pre & post-investment activity",        href: "/seminars",                  color: "#7c3aed", adminOnly: false },
+  { label: "Investor Dinners",   sub: "Event attendees — pre & post-investment activity",          href: "/investor-dinners",          color: "#b45309", adminOnly: false },
   { label: "Sales Report",        sub: "YTD subscription & fund performance",                     href: "/salgsrapport",              color: "#5a4998", adminOnly: false },
   { label: "Marketing Reports",   sub: "Platform ad spend, leads & deal attribution by market",   href: "/marketing",                 color: "#0091ae", adminOnly: false },
   { label: "Compass · Vaekstnet", sub: "DK & SE monthly performance — meetings, deals, team KPIs", href: "/dashboard?region=compass", color: "#6d3b8e", adminOnly: false, compassOnly: true, underConstruction: true },
@@ -120,7 +121,7 @@ export default function HubPage() {
               {TOOLS.filter(t => {
                 if ((t as any).compassOnly) return canCompass
                 if (t.adminOnly) return isAdmin
-                if (t.href === "/pipeline" || t.href === "/investortur" || t.href === "/seminars") return canPipelineTour
+                if (t.href === "/pipeline" || t.href === "/investortur" || t.href === "/seminars" || t.href === "/investor-dinners") return canPipelineTour
                 if (t.href === "/salgsrapport") return canSalesReport
                 if (t.href === "/marketing") return canMarketing
                 return false
