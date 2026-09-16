@@ -26,7 +26,7 @@ function cleanName(name: string): string {
   return name
     .replace(/^dk\s*[-–]\s*event\s*[-–]\s*/i, "")
     .replace(/^se\s*[-–]\s*event\s*[-–]\s*/i, "")
-    .replace(/\s*[-–]\s*attended\s*$/i, "")
+    .replace(/\s*[-–]\s*attendees?\s*$/i, "")
     .trim()
 }
 

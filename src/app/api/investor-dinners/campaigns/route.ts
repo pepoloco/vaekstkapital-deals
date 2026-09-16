@@ -5,10 +5,10 @@ const BASE = "https://api.hubapi.com"
 const KEY = process.env.HUBSPOT_API_KEY!
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
-// Match lists like "DK - Event - Vejle 05.05.26 - Attended"
+// Match lists like "DK - Event - Vejle 05.05.26 - Attended" or "... - Attendees"
 function isEventList(name: string): boolean {
   const lower = name.toLowerCase()
-  if (!lower.includes("attended")) return false
+  if (!lower.includes("attend")) return false
   if (lower.includes("deals won")) return false
   if (lower.includes("total")) return false
   return lower.startsWith("dk - event") || lower.startsWith("se - event")
