@@ -5,10 +5,12 @@ const BASE = "https://api.hubapi.com"
 const KEY = process.env.HUBSPOT_API_KEY!
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
-// Prefix match covering DK + SE, English + Danish naming. Excludes signup/registration lists.
+// Prefix match covering DK + SE, English + Danish naming. Excludes signup/registration lists
+// and lists without a DD.MM date (e.g. "Investor Tour september 2025" has no specific date).
 function isInvestorList(name: string): boolean {
   const lower = name.toLowerCase()
   if (lower.includes("tilmeldte")) return false
+  if (!/\d{2}[./]\d{2}/.test(name)) return false
   return (
     lower.startsWith("bu dk - investor tour") || lower.startsWith("bu dk - investortur") ||
     lower.startsWith("bu se - investor tour") || lower.startsWith("bu se - investortur")

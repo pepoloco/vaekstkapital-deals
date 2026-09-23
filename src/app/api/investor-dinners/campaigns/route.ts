@@ -5,17 +5,20 @@ const BASE = "https://api.hubapi.com"
 const KEY = process.env.HUBSPOT_API_KEY!
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
-// Match lists like "DK - Event - Vejle 05.05.26 - Attended" or "... - Attendees"
+// Match DK event lists: "DK - Event - Vejle 05.05.26 - Attended"
+// Match SE dinner lists: "BU SE - Stockholm 04.03.2026 - participants"
 function isEventList(name: string): boolean {
   const lower = name.toLowerCase()
-  if (!lower.includes("attend")) return false
   if (lower.includes("deals won")) return false
   if (lower.includes("total")) return false
-  return lower.startsWith("dk - event") || lower.startsWith("se - event")
+  if (lower.includes("attend") && (lower.startsWith("dk - event") || lower.startsWith("se - event"))) return true
+  if (lower.startsWith("bu se -") && lower.includes("participants") && /\d{2}[./]\d{2}/.test(name)) return true
+  return false
 }
 
 function extractCountry(name: string): "DK" | "SE" {
-  return name.toLowerCase().startsWith("se - event") ? "SE" : "DK"
+  const lower = name.toLowerCase()
+  return lower.startsWith("se - event") || lower.startsWith("bu se -") ? "SE" : "DK"
 }
 
 const MONTHS: Record<string, string> = {
@@ -109,6 +112,7 @@ export async function GET() {
   const searches = await Promise.allSettled([
     searchLists("DK - Event"),
     searchLists("SE - Event"),
+    searchLists("BU SE -"),
   ])
 
   for (const result of searches) {

@@ -24,9 +24,11 @@ const fmtDate = (iso: string | null | undefined) => {
 
 function cleanName(name: string): string {
   return name
+    .replace(/^bu\s+se\s*[-–]\s*/i, "")
     .replace(/^dk\s*[-–]\s*event\s*[-–]\s*/i, "")
     .replace(/^se\s*[-–]\s*event\s*[-–]\s*/i, "")
     .replace(/\s*[-–]\s*attendees?\s*$/i, "")
+    .replace(/\s*[-–]\s*participants\s*$/i, "")
     .trim()
 }
 
